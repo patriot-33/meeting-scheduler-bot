@@ -29,7 +29,7 @@ async def error_handler(update: Update, context):
     
     if update and update.effective_message:
         await update.effective_message.reply_text(
-            "� @>87>H;0 >H81:0. >60;C9AB0, ?>?@>1C9B5 ?>765 8;8 A2O68B5AL A 04<8=8AB@0B>@><."
+            "Произошла ошибка. Пожалуйста, попробуйте позже или свяжитесь с администратором."
         )
 
 def main():
