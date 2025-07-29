@@ -21,8 +21,8 @@ def setup_scheduler(application):
         'default': AsyncIOExecutor()
     }
     job_defaults = {
-        'coalesce': False,
-        'max_instances': 3
+        'coalesce': True,  # Combine missed jobs for small team
+        'max_instances': 1  # Single instance sufficient for 7 people
     }
     
     scheduler = AsyncIOScheduler(
@@ -32,11 +32,11 @@ def setup_scheduler(application):
         timezone=pytz.timezone(settings.timezone)
     )
     
-    # Add periodic job to process reminders
+    # Add periodic job to process reminders (optimized for small team)
     scheduler.add_job(
         func=process_reminders,
         trigger="interval",
-        minutes=30,  # Check every 30 minutes
+        minutes=15,  # Check every 15 minutes for 7 people
         args=[application],
         id='reminder_processor',
         replace_existing=True

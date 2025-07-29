@@ -5,6 +5,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import pytz
+from functools import lru_cache
 
 from src.config import settings
 
@@ -15,15 +16,17 @@ class GoogleCalendarService:
         self.timezone = pytz.timezone(settings.timezone)
         self.service = self._build_service()
         self.calendar_ids = [settings.google_calendar_id_1, settings.google_calendar_id_2]
+        self._cache_timeout = 300  # 5 minutes cache for small team
         
+    @lru_cache(maxsize=1)
     def _build_service(self):
-        """Build Google Calendar API service."""
+        """Build Google Calendar API service (cached)."""
         try:
             credentials = service_account.Credentials.from_service_account_file(
                 settings.google_service_account_file,
                 scopes=['https://www.googleapis.com/auth/calendar']
             )
-            return build('calendar', 'v3', credentials=credentials)
+            return build('calendar', 'v3', credentials=credentials, cache_discovery=False)
         except Exception as e:
             logger.error(f"Failed to build Google Calendar service: {e}")
             raise

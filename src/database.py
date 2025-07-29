@@ -85,8 +85,15 @@ class Statistics(Base):
     last_meeting_date = Column(DateTime)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
-# Database setup
-engine = create_engine(settings.database_url, echo=settings.debug)
+# Database setup - Optimized for small team (7 people, 1-3 concurrent users)
+engine = create_engine(
+    settings.database_url,
+    pool_size=5,  # Small pool for 7-person team
+    max_overflow=2,
+    pool_recycle=3600,  # Recycle connections every hour
+    pool_pre_ping=True,  # Verify connections before use
+    echo=settings.debug  # Only log SQL in debug mode
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 @contextmanager

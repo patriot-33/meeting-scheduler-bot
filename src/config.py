@@ -1,7 +1,7 @@
 import os
 from typing import List
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, validator
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -46,7 +46,19 @@ class Settings(BaseSettings):
     @property
     def admin_ids_list(self) -> List[int]:
         if isinstance(self.admin_telegram_ids, str):
-            return [int(id.strip()) for id in self.admin_telegram_ids.split(',')]
+            return [int(id.strip()) for id in self.admin_telegram_ids.split(',') if id.strip()]
         return self.admin_telegram_ids
+    
+    @validator('telegram_bot_token')
+    def validate_bot_token(cls, v):
+        if not v or len(v) < 10:
+            raise ValueError('Telegram bot token is required and must be valid')
+        return v
+    
+    @validator('database_url')
+    def validate_database_url(cls, v):
+        if not v or not v.startswith('postgresql'):
+            raise ValueError('PostgreSQL database URL is required')
+        return v
 
 settings = Settings()

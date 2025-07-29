@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import logging
 from sqlalchemy import and_
 
-from src.database import get_db, User, Meeting, UserRole, UserStatus, MeetingStatus
+from src.database import get_db, User, Meeting, UserRole, UserStatus, MeetingStatus, Reminder
 from src.services.google_calendar import GoogleCalendarService
 from src.services.reminder_service import ReminderService
 from src.config import settings
@@ -28,7 +28,7 @@ async def show_available_slots(update: Update, context: ContextTypes.DEFAULT_TYP
             }.get(user.status, "=50:B82=>< AB0BCA5")
             
             await update.message.reply_text(
-                f"  K =0E>48B5AL =0 {status_text}.\n\n"
+                f"ï¿½ K =0E>48B5AL =0 {status_text}.\n\n"
                 f";O =07=0G5=8O 2AB@5G A=0G0;0 25@=8B5AL 2 0:B82=K9 AB0BCA: /active"
             )
             return
@@ -54,7 +54,7 @@ async def show_available_slots(update: Update, context: ContextTypes.DEFAULT_TYP
         
         # Create keyboard with available slots
         keyboard = []
-        message_text = "=Å >ABC?=K5 A;>BK 4;O 2AB@5G\n\n"
+        message_text = "=ï¿½ >ABC?=K5 A;>BK 4;O 2AB@5G\n\n"
         
         for date_str, slots in available_slots.items():
             if slots:  # Only show dates with available slots
@@ -62,7 +62,7 @@ async def show_available_slots(update: Update, context: ContextTypes.DEFAULT_TYP
                 day_name = date_obj.strftime('%A')
                 formatted_date = date_obj.strftime('%d.%m.%Y')
                 
-                message_text += f"=Æ **{day_name}, {formatted_date}**\n"
+                message_text += f"=ï¿½ **{day_name}, {formatted_date}**\n"
                 
                 row = []
                 for slot in slots:
@@ -95,7 +95,7 @@ async def show_available_slots(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception as e:
         logger.error(f"Error getting available slots: {e}")
         await update.message.reply_text(
-            "  @>87>H;0 >H81:0 ?@8 ?>;CG5=88 4>ABC?=KE A;>B>2. >?@>1C9B5 ?>765."
+            "ï¿½ @>87>H;0 >H81:0 ?@8 ?>;CG5=88 4>ABC?=KE A;>B>2. >?@>1C9B5 ?>765."
         )
 
 async def handle_booking_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -114,7 +114,7 @@ async def handle_booking_callback(update: Update, context: ContextTypes.DEFAULT_
             
             if not user or user.status != UserStatus.ACTIVE:
                 await query.edit_message_text(
-                    "  5;L7O =07=0G8BL 2AB@5GC 2 =50:B82=>< AB0BCA5."
+                    "ï¿½ 5;L7O =07=0G8BL 2AB@5GC 2 =50:B82=>< AB0BCA5."
                 )
                 return
             
@@ -131,7 +131,7 @@ async def handle_booking_callback(update: Update, context: ContextTypes.DEFAULT_
             if recent_meeting:
                 next_allowed = recent_meeting.scheduled_time + timedelta(days=14)
                 await query.edit_message_text(
-                    f"  # 20A C65 5ABL 70?;0=8@>20==0O 2AB@5G0.\n\n"
+                    f"ï¿½ # 20A C65 5ABL 70?;0=8@>20==0O 2AB@5G0.\n\n"
                     f"!;54CNICN 2AB@5GC <>6=> =07=0G8BL =5 @0=55 {next_allowed.strftime('%d.%m.%Y')}."
                 )
                 return
@@ -143,7 +143,7 @@ async def handle_booking_callback(update: Update, context: ContextTypes.DEFAULT_
         # Double-check slot availability
         if not calendar_service.check_slot_availability(meeting_date, time_str):
             await query.edit_message_text(
-                "   A>60;5=8N, MB>B A;>B C65 70=OB. >?@>1C9B5 2K1@0BL 4@C3>5 2@5<O."
+                "ï¿½  A>60;5=8N, MB>B A;>B C65 70=OB. >?@>1C9B5 2K1@0BL 4@C3>5 2@5<O."
             )
             return
         
@@ -180,10 +180,10 @@ async def handle_booking_callback(update: Update, context: ContextTypes.DEFAULT_
             try:
                 await context.bot.send_message(
                     chat_id=admin_id,
-                    text=f"=Å >20O 2AB@5G0\n\n"
+                    text=f"=ï¿½ >20O 2AB@5G0\n\n"
                          f"=d {user.first_name} {user.last_name}\n"
-                         f"<í {user.department}\n"
-                         f"=Æ {scheduled_time.strftime('%d.%m.%Y 2 %H:%M')}\n"
+                         f"<ï¿½ {user.department}\n"
+                         f"=ï¿½ {scheduled_time.strftime('%d.%m.%Y 2 %H:%M')}\n"
                          f"< {meet_link}"
                 )
             except Exception as e:
@@ -191,8 +191,8 @@ async def handle_booking_callback(update: Update, context: ContextTypes.DEFAULT_
         
         await query.edit_message_text(
             f" AB@5G0 CA?5H=> =07=0G5=0!\n\n"
-            f"=Æ 0B0: {scheduled_time.strftime('%d.%m.%Y')}\n"
-            f"ð @5<O: {time_str}\n"
+            f"=ï¿½ 0B0: {scheduled_time.strftime('%d.%m.%Y')}\n"
+            f"ï¿½ @5<O: {time_str}\n"
             f"< Google Meet: {meet_link}\n\n"
             f"= K ?>;CG8B5 =0?><8=0=85 70 1 G0A 4> 2AB@5G8."
         )
@@ -200,7 +200,7 @@ async def handle_booking_callback(update: Update, context: ContextTypes.DEFAULT_
     except Exception as e:
         logger.error(f"Error booking meeting: {e}")
         await query.edit_message_text(
-            "  @>87>H;0 >H81:0 ?@8 =07=0G5=88 2AB@5G8. >?@>1C9B5 ?>765."
+            "ï¿½ @>87>H;0 >H81:0 ?@8 =07=0G5=88 2AB@5G8. >?@>1C9B5 ?>765."
         )
 
 @require_registration
@@ -226,7 +226,7 @@ async def show_my_meetings(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         
-        message_text = "=Å 0H8 70?;0=8@>20==K5 2AB@5G8:\n\n"
+        message_text = "=ï¿½ 0H8 70?;0=8@>20==K5 2AB@5G8:\n\n"
         
         keyboard = []
         for meeting in meetings:
@@ -263,7 +263,7 @@ async def handle_cancel_callback(update: Update, context: ContextTypes.DEFAULT_T
         
         if not meeting:
             await query.edit_message_text(
-                "  AB@5G0 =5 =0945=0."
+                "ï¿½ AB@5G0 =5 =0945=0."
             )
             return
         
@@ -286,7 +286,7 @@ async def handle_cancel_callback(update: Update, context: ContextTypes.DEFAULT_T
         
         await query.edit_message_text(
             f"L AB@5G0 >B<5=5=0\n\n"
-            f"=Æ {meeting.scheduled_time.strftime('%d.%m.%Y 2 %H:%M')}\n\n"
+            f"=ï¿½ {meeting.scheduled_time.strftime('%d.%m.%Y 2 %H:%M')}\n\n"
             f">65B5 =07=0G8BL =>2CN 2AB@5GC G5@57 /schedule"
         )
 
@@ -370,10 +370,10 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         profile_text = (
             f"=d **>9 ?@>D8;L**\n\n"
-            f"=Û <O: {user.first_name} {user.last_name}\n"
-            f"<í B45;: {user.department}\n"
+            f"=ï¿½ <O: {user.first_name} {user.last_name}\n"
+            f"<ï¿½ B45;: {user.department}\n"
             f"{status_emoji} !B0BCA: {user.status.value}\n\n"
-            f"=Ê **!B0B8AB8:0:**\n"
+            f"=ï¿½ **!B0B8AB8:0:**\n"
             f"" A53> 2AB@5G: {total_meetings}\n"
             f"" @>2545=>: {completed_meetings}\n"
         )

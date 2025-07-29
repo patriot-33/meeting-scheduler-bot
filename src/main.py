@@ -16,27 +16,56 @@ from src.handlers import registration, admin, manager, common
 from src.services.reminder_service import ReminderService
 from src.utils.scheduler import setup_scheduler
 
-# Configure logging
+# Configure logging for small team
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=getattr(logging, settings.log_level)
+    level=getattr(logging, settings.log_level),
+    handlers=[
+        logging.StreamHandler(),  # Console output for render.com
+        logging.FileHandler('bot.log', encoding='utf-8') if settings.debug else logging.NullHandler()
+    ]
 )
 logger = logging.getLogger(__name__)
 
+# Set third-party loggers to WARNING to reduce noise
+logging.getLogger('telegram').setLevel(logging.WARNING)
+logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('googleapiclient').setLevel(logging.WARNING)
+
 async def error_handler(update: Update, context):
     """Log errors caused by updates."""
-    logger.error(f"Update {update} caused error {context.error}")
+    # Don't log sensitive update data in production
+    if settings.debug:
+        logger.error(f"Update {update} caused error {context.error}")
+    else:
+        logger.error(f"Error occurred: {type(context.error).__name__}")
     
     if update and update.effective_message:
-        await update.effective_message.reply_text(
-            "Произошла ошибка. Пожалуйста, попробуйте позже или свяжитесь с администратором."
-        )
+        try:
+            await update.effective_message.reply_text(
+                "⚠️ Произошла техническая ошибка. Попробуйте позже."
+            )
+        except Exception as e:
+            logger.error(f"Failed to send error message: {e}")
 
 def main():
     """Start the bot."""
+    logger.info("🚀 Starting Meeting Scheduler Bot for team...")
+    
+    # Health check before startup
+    from src.utils.health_check import health_check
+    health = health_check()
+    if health['status'] != 'healthy':
+        logger.error(f"❌ Health check failed: {health}")
+        return
+    
     # Initialize database
-    init_db()
-    logger.info("Database initialized")
+    try:
+        init_db()
+        logger.info("✅ Database initialized")
+    except Exception as e:
+        logger.error(f"❌ Database initialization failed: {e}")
+        return
     
     # Create application
     application = Application.builder().token(settings.telegram_bot_token).build()
@@ -77,22 +106,34 @@ def main():
     application.add_error_handler(error_handler)
     
     # Setup scheduler for reminders
-    scheduler = setup_scheduler(application)
-    scheduler.start()
+    try:
+        scheduler = setup_scheduler(application)
+        scheduler.start()
+        logger.info("✅ Scheduler started")
+    except Exception as e:
+        logger.error(f"❌ Scheduler setup failed: {e}")
+        return
     
     # Run the bot
-    if settings.webhook_url:
-        # Webhook mode for production
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=settings.port,
-            url_path=settings.webhook_path,
-            webhook_url=f"{settings.webhook_url}{settings.webhook_path}",
-            allowed_updates=Update.ALL_TYPES,
-        )
-    else:
-        # Polling mode for development
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    try:
+        if settings.webhook_url:
+            logger.info(f"🌐 Starting webhook mode on port {settings.port}")
+            # Webhook mode for production
+            application.run_webhook(
+                listen="0.0.0.0",
+                port=settings.port,
+                url_path=settings.webhook_path,
+                webhook_url=f"{settings.webhook_url}{settings.webhook_path}",
+                allowed_updates=Update.ALL_TYPES,
+            )
+        else:
+            logger.info("🔄 Starting polling mode for development")
+            # Polling mode for development
+            application.run_polling(allowed_updates=Update.ALL_TYPES)
+    except Exception as e:
+        logger.error(f"❌ Bot startup failed: {e}")
+        scheduler.shutdown()
+        raise
 
 if __name__ == '__main__':
     main()

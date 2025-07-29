@@ -107,7 +107,7 @@ class ReminderService:
                 )
             elif days == '3':
                 message = (
-                    f"  06=>5 =0?><8=0=85\n\n"
+                    f"ï¿½ 06=>5 =0?><8=0=85\n\n"
                     f"AB0;>AL 3 4=O 4> :@09=53> A@>:0 =07=0G5=8O 2AB@5G8.\n"
                     f">60;C9AB0, >1O70B5;L=> =07=0GLB5 2AB@5GC!\n\n"
                     f"/schedule - >A<>B@5BL 4>ABC?=K5 A;>BK"
@@ -129,7 +129,7 @@ class ReminderService:
             message = (
                 f"= 0?><8=0=85 > 2AB@5G5\n\n"
                 f"'5@57 1 G0A C 20A 2AB@5G0!\n\n"
-                f"=Å {date_str} 2 {time_str}\n"
+                f"=ï¿½ {date_str} 2 {time_str}\n"
                 f"< Google Meet: {meeting.google_meet_link}\n\n"
                 f">43>B>2LB5AL : A>72>=C!"
             )
@@ -148,7 +148,7 @@ class ReminderService:
             overdue_users = db.query(User).filter(
                 and_(
                     User.status == UserStatus.ACTIVE,
-                    User.role.in_(['manager']),
+                    User.role.in_([UserRole.MANAGER]),
                     ~User.meetings.any(
                         Meeting.scheduled_time > cutoff_date,
                         Meeting.status == MeetingStatus.SCHEDULED
@@ -161,7 +161,7 @@ class ReminderService:
     
     async def _notify_admins_about_overdue(self, bot: Bot, overdue_users: List[User]):
         """Notify admins about users with overdue meetings."""
-        message = "=¨ @>A@>G5==K5 2AB@5G8\n\n"
+        message = "=ï¿½ @>A@>G5==K5 2AB@5G8\n\n"
         message += "!;54CNI85 @C:>2>48B5;8 =5 =07=0G8;8 2-=545;L=CN 2AB@5GC:\n\n"
         
         for user in overdue_users:

@@ -3,7 +3,7 @@ from sqlalchemy import and_
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from src.database import Meeting, User, MeetingStatus
+from src.database import Meeting, User, MeetingStatus, UserStatus, UserRole
 from src.services.google_calendar import GoogleCalendarService
 from src.services.reminder_service import ReminderService
 
