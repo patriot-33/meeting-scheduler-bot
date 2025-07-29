@@ -9,7 +9,7 @@ load_dotenv()
 class Settings(BaseSettings):
     # Telegram
     telegram_bot_token: str = Field(..., env="TELEGRAM_BOT_TOKEN")
-    admin_telegram_ids: List[int] = Field(..., env="ADMIN_TELEGRAM_IDS")
+    admin_telegram_ids: str = Field(..., env="ADMIN_TELEGRAM_IDS")
     
     # Database
     database_url: str = Field(..., env="DATABASE_URL")
