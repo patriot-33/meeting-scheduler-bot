@@ -1,7 +1,8 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from sqlalchemy import func
+from datetime import datetime, timedelta
 import logging
+from sqlalchemy import and_
 
 from src.database import get_db, User, Meeting, UserRole, UserStatus, MeetingStatus
 from src.config import settings
@@ -10,325 +11,234 @@ from src.utils.decorators import require_admin
 logger = logging.getLogger(__name__)
 
 @require_admin
-async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show admin menu."""
     keyboard = [
-        [
-            InlineKeyboardButton("=e >;L7>20B5;8", callback_data="admin_users"),
-            InlineKeyboardButton("S 6840NI85", callback_data="admin_pending")
-        ],
-        [
-            InlineKeyboardButton("=� !B0B8AB8:0", callback_data="admin_stats"),
-            InlineKeyboardButton("= #254><;5=8O", callback_data="admin_notifications")
-        ],
-        [
-            InlineKeyboardButton("=�  0AAK;:0", callback_data="admin_broadcast")
-        ]
+        [InlineKeyboardButton("👥 Пользователи на модерации", callback_data="admin_pending")],
+        [InlineKeyboardButton("📋 Все пользователи", callback_data="admin_users")],
+        [InlineKeyboardButton("📊 Статистика", callback_data="admin_stats")],
+        [InlineKeyboardButton("📢 Рассылка", callback_data="admin_broadcast")],
     ]
-    
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        "=� **4<8=-?0=5;L**\n\nK15@8B5 459AB285:",
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
-    )
+    await update.message.reply_text("🔧 Панель администратора:", reply_markup=reply_markup)
 
 @require_admin
-async def show_pending_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show pending users for approval."""
+async def show_pending_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show users pending approval."""
     with get_db() as db:
         pending_users = db.query(User).filter(User.role == UserRole.PENDING).all()
         
         if not pending_users:
-            await update.message.reply_text(
-                " 5B ?>;L7>20B5;59, >6840NI8E >4>1@5=8O."
-            )
+            await update.message.reply_text("✅ Нет пользователей ожидающих одобрения.")
             return
         
-        message_text = "S **>;L7>20B5;8, >6840NI85 >4>1@5=8O:**\n\n"
+        message_text = "👥 **Пользователи на модерации:**\n\n"
+        
+        for user in pending_users:
+            message_text += f"• {user.first_name} {user.last_name}\n"
+            message_text += f"  Отдел: {user.department}\n"
+            message_text += f"  ID: {user.telegram_id}\n\n"
         
         keyboard = []
         for user in pending_users:
-            message_text += (
-                f"=d {user.first_name} {user.last_name}\n"
-                f"<� {user.department}\n"
-                f"=� @{user.telegram_username or 'N/A'}\n"
-                f"<� {user.telegram_id}\n\n"
-            )
-            
             keyboard.append([
-                InlineKeyboardButton(
-                    f" 4>1@8BL {user.first_name}",
-                    callback_data=f"admin_approve_{user.telegram_id}"
-                ),
-                InlineKeyboardButton(
-                    f"L B:;>=8BL {user.first_name}",
-                    callback_data=f"admin_reject_{user.telegram_id}"
-                )
+                InlineKeyboardButton(f"✅ Одобрить {user.first_name}", 
+                                   callback_data=f"admin_approve_{user.id}"),
+                InlineKeyboardButton(f"❌ Отклонить", 
+                                   callback_data=f"admin_reject_{user.id}")
             ])
         
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            message_text,
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
+        await update.message.reply_text(message_text, reply_markup=reply_markup, parse_mode='Markdown')
 
-@require_admin
-async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
+@require_admin 
+async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """List all users."""
     with get_db() as db:
         users = db.query(User).filter(User.role != UserRole.PENDING).all()
         
         if not users:
-            await update.message.reply_text(
-                ">7B 5B 70@538AB@8@>20==KE ?>;L7>20B5;59."
-            )
+            await update.message.reply_text("Нет зарегистрированных пользователей.")
             return
         
-        message_text = "=e **!?8A>: ?>;L7>20B5;59:**\n\n"
+        message_text = "📋 **Список пользователей:**\n\n"
         
         admins = []
         managers = []
         
         for user in users:
-            user_info = f"=d {user.first_name} {user.last_name} ({user.department})"
-            
+            user_info = f"• {user.first_name} {user.last_name} ({user.department})"
             if user.role == UserRole.ADMIN:
                 admins.append(user_info)
             else:
-                status_emoji = {
-                    UserStatus.ACTIVE: "",
-                    UserStatus.VACATION: "<4",
-                    UserStatus.SICK_LEAVE: ">",
-                    UserStatus.BUSINESS_TRIP: ""
-                }.get(user.status, "S")
-                managers.append(f"{user_info} {status_emoji}")
+                managers.append(user_info)
         
         if admins:
-            message_text += "=� **4<8=8AB@0B>@K:**\n"
-            for admin in admins:
-                message_text += f"{admin}\n"
-            message_text += "\n"
+            message_text += "👨‍💼 **Администраторы:**\n"
+            message_text += "\n".join(admins) + "\n\n"
         
         if managers:
-            message_text += "=� ** C:>2>48B5;8:**\n"
-            for manager in managers:
-                message_text += f"{manager}\n"
+            message_text += "👥 **Менеджеры:**\n"
+            message_text += "\n".join(managers)
         
-        # Split message if too long
-        if len(message_text) > 4000:
-            parts = message_text.split('\n')
-            current_part = ""
-            
-            for part in parts:
-                if len(current_part + part + '\n') > 4000:
-                    await update.message.reply_text(current_part, parse_mode='Markdown')
-                    current_part = part + '\n'
-                else:
-                    current_part += part + '\n'
-            
-            if current_part:
-                await update.message.reply_text(current_part, parse_mode='Markdown')
-        else:
-            await update.message.reply_text(message_text, parse_mode='Markdown')
+        await update.message.reply_text(message_text, parse_mode='Markdown')
 
 @require_admin
-async def show_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show bot statistics."""
+async def show_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show bot usage statistics."""
     with get_db() as db:
-        # User statistics
         total_users = db.query(User).count()
+        active_users = db.query(User).filter(User.status == UserStatus.ACTIVE).count()
         pending_users = db.query(User).filter(User.role == UserRole.PENDING).count()
-        active_managers = db.query(User).filter(
-            User.role == UserRole.MANAGER,
-            User.status == UserStatus.ACTIVE
-        ).count()
         
         # Meeting statistics
         total_meetings = db.query(Meeting).count()
-        scheduled_meetings = db.query(Meeting).filter(
-            Meeting.status == MeetingStatus.SCHEDULED
-        ).count()
-        completed_meetings = db.query(Meeting).filter(
-            Meeting.status == MeetingStatus.COMPLETED
-        ).count()
+        scheduled_meetings = db.query(Meeting).filter(Meeting.status == MeetingStatus.SCHEDULED).count()
+        completed_meetings = db.query(Meeting).filter(Meeting.status == MeetingStatus.COMPLETED).count()
         
-        # Department statistics
-        dept_stats = db.query(
-            User.department,
-            func.count(User.id).label('count')
-        ).filter(
-            User.role == UserRole.MANAGER
-        ).group_by(User.department).all()
+        # Recent activity (last 7 days)
+        week_ago = datetime.now() - timedelta(days=7)
+        recent_registrations = db.query(User).filter(User.created_at >= week_ago).count()
+        recent_meetings = db.query(Meeting).filter(Meeting.created_at >= week_ago).count()
         
-        stats_text = (
-            f"=� **!B0B8AB8:0 1>B0**\n\n"
-            f"=e **>;L7>20B5;8:**\n"
-            f"" A53>: {total_users}\n"
-            f"" 6840NB >4>1@5=8O: {pending_users}\n"
-            f"" :B82=K5 @C:>2>48B5;8: {active_managers}\n\n"
-            f"=� **AB@5G8:**\n"
-            f"" A53>: {total_meetings}\n"
-            f"" 0?;0=8@>20=>: {scheduled_meetings}\n"
-            f"" @>2545=>: {completed_meetings}\n\n"
-        )
+        message_text = f"""📊 **Статистика бота:**
+
+👥 **Пользователи:**
+• Всего: {total_users}
+• Активных: {active_users}
+• На модерации: {pending_users}
+
+📅 **Встречи:**
+• Всего: {total_meetings}
+• Запланированных: {scheduled_meetings}
+• Завершенных: {completed_meetings}
+
+📈 **За последние 7 дней:**
+• Новых регистраций: {recent_registrations}
+• Новых встреч: {recent_meetings}
+"""
         
-        if dept_stats:
-            stats_text += "<� **> >B45;0<:**\n"
-            for dept, count in dept_stats:
-                stats_text += f"" {dept}: {count}\n"
-        
-        await update.message.reply_text(stats_text, parse_mode='Markdown')
+        await update.message.reply_text(message_text, parse_mode='Markdown')
 
 @require_admin
-async def broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Broadcast message to all users."""
     if not context.args:
         await update.message.reply_text(
-            "� #:068B5 A>>1I5=85 4;O @0AAK;:8.\n\n"
-            "@8<5@: `/broadcast 06=>5 >1JO2;5=85!`"
+            "Использование: /broadcast <сообщение>\n\n"
+            "Пример: /broadcast Внимание! Завтра техническое обслуживание."
         )
         return
     
-    message = ' '.join(context.args)
+    message = " ".join(context.args)
     
     with get_db() as db:
         users = db.query(User).filter(User.role != UserRole.PENDING).all()
         
-        success_count = 0
+        sent_count = 0
         failed_count = 0
         
         for user in users:
             try:
                 await context.bot.send_message(
                     chat_id=user.telegram_id,
-                    text=f"=� **1JO2;5=85 >B 04<8=8AB@0F88:**\n\n{message}",
+                    text=f"📢 **Объявление от администрации:**\n\n{message}",
                     parse_mode='Markdown'
                 )
-                success_count += 1
+                sent_count += 1
             except Exception as e:
-                logger.error(f"Failed to send broadcast to user {user.telegram_id}: {e}")
+                logger.error(f"Failed to send broadcast to user {user.id}: {e}")
                 failed_count += 1
         
         await update.message.reply_text(
-            f"=�  0AAK;:0 7025@H5=0!\n\n"
-            f" B?@02;5=>: {success_count}\n"
-            f"L H81>:: {failed_count}"
+            f"✅ Рассылка завершена!\n\n"
+            f"Отправлено: {sent_count}\n"
+            f"Ошибок: {failed_count}"
         )
 
-@require_admin
-async def toggle_notifications(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Toggle admin notifications."""
-    user_id = update.effective_user.id
-    
-    # This would need to be stored in database or settings
-    # For now, just show current status
+@require_admin 
+async def toggle_notifications(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Toggle notification settings."""
     await update.message.reply_text(
-        "= **0AB@>9:8 C254><;5=89**\n\n"
-        " #254><;5=8O > =>2KE 2AB@5G0E: 2:;\n"
-        " #254><;5=8O > ?@>A@>G5==KE 2AB@5G0E: 2:;\n\n"
-        "9 #?@02;5=85 C254><;5=8O<8 1C45B 4>102;5=> 2 A;54CNI8E >1=>2;5=8OE.",
-        parse_mode='Markdown'
+        "🔔 Управление уведомлениями пока не реализовано.\n"
+        "В следующих версиях здесь можно будет настроить:\n"
+        "• Напоминания о встречах\n"
+        "• Уведомления о новых регистрациях\n" 
+        "• Отчеты о просроченных встречах"
     )
 
-async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle admin callback queries."""
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = update.effective_user.id
-    
-    # Check admin permissions
+async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int) -> None:
+    """Approve user registration."""
     with get_db() as db:
-        admin = db.query(User).filter(
-            User.telegram_id == user_id,
-            User.role == UserRole.ADMIN
-        ).first()
-        
-        if not admin:
-            await query.edit_message_text(
-                "� # 20A =5B ?@02 04<8=8AB@0B>@0."
-            )
-            return
-    
-    if query.data.startswith('admin_approve_'):
-        telegram_id = int(query.data.split('_')[2])
-        await approve_user(query, telegram_id)
-    
-    elif query.data.startswith('admin_reject_'):
-        telegram_id = int(query.data.split('_')[2])
-        await reject_user(query, telegram_id, context.bot)
-    
-    elif query.data == 'admin_users':
-        await query.edit_message_text("1=>2;ON A?8A>: ?>;L7>20B5;59...")
-        # Would call list_users here
-    
-    elif query.data == 'admin_pending':
-        await query.edit_message_text("1=>2;ON A?8A>: >6840NI8E...")
-        # Would call show_pending_users here
-
-async def approve_user(query, telegram_id: int):
-    """Approve a pending user."""
-    with get_db() as db:
-        user = db.query(User).filter(User.telegram_id == telegram_id).first()
-        
-        if not user or user.role != UserRole.PENDING:
-            await query.edit_message_text(
-                "� >;L7>20B5;L =5 =0945= 8;8 C65 >1@01>B0=."
-            )
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            await update.callback_query.answer("❌ Пользователь не найден")
             return
         
         user.role = UserRole.MANAGER
         db.commit()
         
-        await query.edit_message_text(
-            f" >;L7>20B5;L {user.first_name} {user.last_name} >4>1@5=!\n\n"
-            f"= <>65B =0G0BL ?>;L7>20BLAO 1>B><."
-        )
-        
-        # Notify the user
+        # Notify user
         try:
-            await query.bot.send_message(
-                chat_id=telegram_id,
-                text=(
-                    f" >74@02;O5<!\n\n"
-                    f"0H0 70O2:0 =0 @538AB@0F8N >4>1@5=0!\n\n"
-                    f""5?5@L 2K <>65B5 =07=0G0BL 2AB@5G8.\n\n"
-                    f"06<8B5 /schedule 4;O ?@>A<>B@0 4>ABC?=KE A;>B>2."
-                )
+            await context.bot.send_message(
+                chat_id=user.telegram_id,
+                text="🎉 Поздравляем! Ваша регистрация одобрена.\n\n"
+                     "Теперь вы можете планировать встречи через команду /schedule"
             )
         except Exception as e:
-            logger.error(f"Failed to notify approved user {telegram_id}: {e}")
-
-async def reject_user(query, telegram_id: int, bot):
-    """Reject a pending user."""
-    with get_db() as db:
-        user = db.query(User).filter(User.telegram_id == telegram_id).first()
+            logger.error(f"Failed to notify approved user {user.id}: {e}")
         
-        if not user or user.role != UserRole.PENDING:
-            await query.edit_message_text(
-                "� >;L7>20B5;L =5 =0945= 8;8 C65 >1@01>B0=."
-            )
+        await update.callback_query.edit_message_text(
+            f"✅ Пользователь {user.first_name} {user.last_name} одобрен!"
+        )
+
+async def reject_user(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int) -> None:
+    """Reject user registration."""
+    with get_db() as db:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            await update.callback_query.answer("❌ Пользователь не найден")
             return
         
-        user_name = f"{user.first_name} {user.last_name}"
+        # Notify user
+        try:
+            await context.bot.send_message(
+                chat_id=user.telegram_id,
+                text="❌ К сожалению, ваша заявка на регистрацию отклонена.\n\n"
+                     "Обратитесь к администратору для получения дополнительной информации."
+            )
+        except Exception as e:
+            logger.error(f"Failed to notify rejected user {user.id}: {e}")
+        
+        # Delete user
         db.delete(user)
         db.commit()
         
-        await query.edit_message_text(
-            f"L 0O2:0 ?>;L7>20B5;O {user_name} >B:;>=5=0."
+        await update.callback_query.edit_message_text(
+            f"❌ Пользователь {user.first_name} {user.last_name} отклонен и удален."
         )
-        
-        # Notify the user
-        try:
-            await bot.send_message(
-                chat_id=telegram_id,
-                text=(
-                    f"L  A>60;5=8N, 20H0 70O2:0 =0 @538AB@0F8N >B:;>=5=0.\n\n"
-                    f"A;8 C 20A 5ABL 2>?@>AK, >1@0B8B5AL : 04<8=8AB@0B>@C."
-                )
-            )
-        except Exception as e:
-            logger.error(f"Failed to notify rejected user {telegram_id}: {e}")
+
+async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle admin callback queries."""
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    
+    if data == "admin_pending":
+        await show_pending_users(update, context)
+    elif data == "admin_users":
+        await list_users(update, context)
+    elif data == "admin_stats":
+        await show_statistics(update, context)
+    elif data == "admin_broadcast":
+        await query.edit_message_text(
+            "📢 Для рассылки используйте команду:\n"
+            "/broadcast <ваше сообщение>"
+        )
+    elif data.startswith("admin_approve_"):
+        user_id = int(data.split("_")[2])
+        await approve_user(update, context, user_id)
+    elif data.startswith("admin_reject_"):
+        user_id = int(data.split("_")[2])
+        await reject_user(update, context, user_id)
