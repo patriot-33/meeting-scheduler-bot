@@ -63,13 +63,13 @@ async def get_first_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if len(first_name) < 2:
         await update.message.reply_text(
-            "� <O A;8H:>< :>@>B:>5. >60;C9AB0, 22548B5 ?>;=>5 8<O:"
+            " <O A;8H:>< :>@>B:>5. >60;C9AB0, 22548B5 ?>;=>5 8<O:"
         )
         return FIRST_NAME
     
     context.user_data['first_name'] = first_name
     await update.message.reply_text(
-        f"@8OB=> ?>7=0:><8BLAO, {first_name}!\n\n"5?5@L 22548B5 20HC D0<8;8N:"
+        f"Приятно познакомиться, {first_name}!\n\nТеперь введите вашу фамилию:"
     )
     
     return LAST_NAME
@@ -80,7 +80,7 @@ async def get_last_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if len(last_name) < 2:
         await update.message.reply_text(
-            "� $0<8;8O A;8H:>< :>@>B:0O. >60;C9AB0, 22548B5 ?>;=CN D0<8;8N:"
+            " $0<8;8O A;8H:>< :>@>B:0O. >60;C9AB0, 22548B5 ?>;=CN D0<8;8N:"
         )
         return LAST_NAME
     
@@ -98,7 +98,7 @@ async def get_last_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        "<� K15@8B5 20H >B45;:",
+        "< K15@8B5 20H >B45;:",
         reply_markup=reply_markup
     )
     
@@ -134,7 +134,7 @@ async def get_department(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(
         f" !?0A81> 70 @538AB@0F8N!\n\n"
         f"=d {first_name} {last_name}\n"
-        f"<� B45;: {department}\n\n"
+        f"< B45;: {department}\n\n"
         f"=Q 0H0 70O2:0 >B?@02;5=0 =0 >4>1@5=85 04<8=8AB@0B>@C.\n"
         f"K ?>;CG8B5 C254><;5=85, :>340 20H0 70O2:0 1C45B >4>1@5=0."
     )
@@ -150,11 +150,11 @@ async def get_department(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             await context.bot.send_message(
                 chat_id=admin_id,
-                text=f"<� >20O 70O2:0 =0 @538AB@0F8N:\n\n"
-                     f"<� {user_id}\n"
+                text=f"< >20O 70O2:0 =0 @538AB@0F8N:\n\n"
+                     f"< {user_id}\n"
                      f"=d {first_name} {last_name}\n"
-                     f"=� @{username}\n"
-                     f"<� {department}",
+                     f"= @{username}\n"
+                     f"< {department}",
                 reply_markup=reply_markup
             )
         except Exception as e:
@@ -168,7 +168,7 @@ async def get_department(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cancel_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel the registration process."""
     await update.message.reply_text(
-        "=�  538AB@0F8O >B<5=5=0. A?>;L7C9B5 /start 4;O =0G0;0 70=>2>."
+        "=  538AB@0F8O >B<5=5=0. A?>;L7C9B5 /start 4;O =0G0;0 70=>2>."
     )
     context.user_data.clear()
     return ConversationHandler.END
