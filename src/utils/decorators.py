@@ -1,13 +1,16 @@
-from functools import wraps
+import functools
+import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from src.database import get_db, User, UserRole
 
+logger = logging.getLogger(__name__)
+
 def require_registration(func):
     """Decorator to require user registration."""
-    @wraps(func)
-    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    @functools.wraps(func)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         user_id = update.effective_user.id
         
         with get_db() as db:
@@ -15,25 +18,26 @@ def require_registration(func):
             
             if not user:
                 await update.message.reply_text(
-                    "� K =5 70@538AB@8@>20=K.\n\n"
-                    "06<8B5 /register 4;O @538AB@0F88."
+                    "Вы не зарегистрированы.\n\n"
+                    "Нажмите /register для регистрации."
                 )
                 return
             
             if user.role == UserRole.PENDING:
                 await update.message.reply_text(
-                    "9 0H0 70O2:0 >68405B >4>1@5=8O 04<8=8AB@0B>@><."
+                    "Ваша заявка на рассмотрении.\n\n"
+                    "Ожидайте одобрения от администратора."
                 )
                 return
-        
-        return await func(update, context)
+            
+            return await func(update, context, *args, **kwargs)
     
     return wrapper
 
 def require_admin(func):
-    """Decorator to require admin role."""
-    @wraps(func)
-    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Decorator to require admin privileges."""
+    @functools.wraps(func)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         user_id = update.effective_user.id
         
         with get_db() as db:
@@ -41,10 +45,11 @@ def require_admin(func):
             
             if not user or user.role != UserRole.ADMIN:
                 await update.message.reply_text(
-                    "� -B0 :><0=40 4>ABC?=0 B>;L:> 04<8=8AB@0B>@0<."
+                    "❌ Недостаточно прав доступа.\n\n"
+                    "Эта команда доступна только администраторам."
                 )
                 return
-        
-        return await func(update, context)
+            
+            return await func(update, context, *args, **kwargs)
     
     return wrapper
