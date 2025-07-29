@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: meeting-scheduler-bot
+    runtime: docker
+    repo: https://github.com/patriot-33/meeting-scheduler-bot
+    branch: main
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: meeting-scheduler-db
+          property: connectionString
+      - key: PORT
+        value: 8443
+      - key: PYTHON_VERSION
+        value: 3.11
+
+databases:
+  - name: meeting-scheduler-db
+    plan: free
+    databaseName: meeting_scheduler
+    user: meeting_bot
