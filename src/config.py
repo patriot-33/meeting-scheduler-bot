@@ -8,16 +8,16 @@ class Settings(BaseSettings):
     """Complete application settings with all required fields."""
     
     # Telegram Bot (backward compatible)
-    telegram_bot_token: str = Field(..., env="TELEGRAM_BOT_TOKEN", description="Telegram Bot Token")
+    telegram_bot_token: str = Field(default="", env="TELEGRAM_BOT_TOKEN", description="Telegram Bot Token")
     telegram_token: Optional[str] = Field(None, env="TELEGRAM_TOKEN", description="Alternative telegram token field")
-    admin_telegram_ids: str = Field(..., env="ADMIN_TELEGRAM_IDS", description="Admin telegram IDs")
+    admin_telegram_ids: str = Field(default="", env="ADMIN_TELEGRAM_IDS", description="Admin telegram IDs")
     
     # Database
-    database_url: str = Field(..., env="DATABASE_URL", description="Database connection URL")
+    database_url: str = Field(default="sqlite:///meeting_scheduler.db", env="DATABASE_URL", description="Database connection URL")
     
     # Google Calendar (Enhanced with multiple authentication methods)
-    google_calendar_id_1: str = Field(..., env="GOOGLE_CALENDAR_ID_1", description="Primary Google Calendar ID")
-    google_calendar_id_2: str = Field(..., env="GOOGLE_CALENDAR_ID_2", description="Secondary Google Calendar ID")
+    google_calendar_id_1: str = Field(default="primary", env="GOOGLE_CALENDAR_ID_1", description="Primary Google Calendar ID")
+    google_calendar_id_2: str = Field(default="", env="GOOGLE_CALENDAR_ID_2", description="Secondary Google Calendar ID")
     
     # Google Service Account - Multiple methods supported
     google_service_account_file: str = Field(
@@ -138,29 +138,29 @@ class Settings(BaseSettings):
         }
     
     @validator('telegram_bot_token')
-    def validate_bot_token(cls, v):
-        if not v or len(v) < 10:
-            raise ValueError('Telegram bot token is required and must be valid')
+    def validate_bot_token(cls, v, values):
+        # Allow empty token for testing/development
+        if v and len(v) < 10:
+            raise ValueError('Telegram bot token must be valid if provided')
         return v
     
     @validator('database_url')
     def validate_database_url(cls, v):
-        if not v:
-            raise ValueError('Database URL is required')
-        # Support PostgreSQL and SQLite for local testing
-        if not (v.startswith('postgresql') or v.startswith('sqlite')):
-            raise ValueError('PostgreSQL or SQLite database URL is required')
-        return v
+        # Allow empty for testing, will use default SQLite
+        if v and not v.startswith(('sqlite:', 'postgresql:')):
+            raise ValueError('Database URL must be SQLite or PostgreSQL URL')
+        return v or "sqlite:///meeting_scheduler.db"
     
     @validator('admin_telegram_ids')
     def validate_admin_ids(cls, v):
+        # Allow empty for testing/development
         if not v:
-            raise ValueError('At least one admin Telegram ID is required')
+            return v
         try:
             # Test parsing
             ids = [int(id.strip()) for id in v.split(',') if id.strip()]
             if not ids:
-                raise ValueError('At least one valid admin ID is required')
+                raise ValueError('At least one valid admin ID is required when provided')
         except ValueError as e:
             raise ValueError(f'Invalid admin Telegram IDs format: {e}')
         return v

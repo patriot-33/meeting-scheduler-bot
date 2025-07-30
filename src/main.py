@@ -9,6 +9,7 @@ from telegram.ext import (
     ConversationHandler,
     filters,
 )
+from aiohttp import web, Request
 
 from config import settings
 from database import init_db
@@ -31,6 +32,22 @@ logger = logging.getLogger(__name__)
 logging.getLogger('telegram').setLevel(logging.WARNING)
 logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('googleapiclient').setLevel(logging.WARNING)
+
+async def health_handler(request: Request):
+    """Health check endpoint for deployment platforms."""
+    from utils.health_check import health_check
+    import json
+    
+    try:
+        health_status = health_check()
+        status_code = 200 if health_status['status'] == 'healthy' else 503
+        return web.json_response(health_status, status=status_code)
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return web.json_response(
+            {"status": "unhealthy", "error": str(e)}, 
+            status=503
+        )
 
 async def error_handler(update: Update, context):
     """Log errors caused by updates."""
@@ -115,8 +132,7 @@ def main():
     # Callback query handlers (medium priority)
     application.add_handler(CallbackQueryHandler(admin.handle_admin_callback, pattern="^admin_"))
     application.add_handler(CallbackQueryHandler(owner.handle_owner_callback, pattern="^owner_"))
-    application.add_handler(CallbackQueryHandler(manager.handle_booking_callback, pattern="^book_"))
-    application.add_handler(CallbackQueryHandler(manager.handle_cancel_callback, pattern="^cancel_"))
+    # Note: manager booking callbacks are handled by get_manager_handlers() below
     application.add_handler(CallbackQueryHandler(manager_calendar.handle_calendar_callback, pattern="^(send_email_to_owner|calendar_faq|connect_calendar)$"))
     application.add_handler(CallbackQueryHandler(common.handle_navigation_callback, pattern="^nav_"))
     
@@ -141,16 +157,22 @@ def main():
     for handler in manager.get_manager_handlers():
         application.add_handler(handler)
     
-    # Existing manager commands (if they exist)
-    try:
-        application.add_handler(CommandHandler("my_meetings", manager.show_my_meetings))
-        application.add_handler(CommandHandler("vacation", manager.set_vacation))
-        application.add_handler(CommandHandler("sick", manager.set_sick_leave))
-    except AttributeError:
-        logger.info("Some manager commands not available - using new handlers only")
-    application.add_handler(CommandHandler("trip", manager.set_business_trip))
-    application.add_handler(CommandHandler("active", manager.set_active))
-    application.add_handler(CommandHandler("profile", manager.show_profile))
+    # Additional manager commands (if they exist)
+    manager_commands = [
+        ("my_meetings", "show_my_meetings"),
+        ("vacation", "set_vacation"),
+        ("sick", "set_sick_leave"),
+        ("trip", "set_business_trip"),
+        ("active", "set_active"),
+        ("profile", "show_profile")
+    ]
+    
+    for command_name, function_name in manager_commands:
+        try:
+            handler_function = getattr(manager, function_name)
+            application.add_handler(CommandHandler(command_name, handler_function))
+        except AttributeError:
+            logger.debug(f"Manager command '{command_name}' not available - skipping")
     application.add_handler(CommandHandler("calendar", manager_calendar.connect_calendar))
     application.add_handler(CommandHandler("email", manager_calendar.save_manager_email))
     
@@ -172,13 +194,23 @@ def main():
             webhook_full_url = f"{settings.webhook_url}{settings.webhook_path}"
             logger.info(f"🌐 Starting webhook mode on port {settings.port}")
             logger.info(f"🔗 Webhook URL: {webhook_full_url}")
-            # Webhook mode for production
+            
+            # Create webhook with health endpoint
+            import aiohttp.web
+            
+            async def create_app():
+                app = aiohttp.web.Application()
+                app.router.add_get('/health', health_handler)
+                return app
+            
+            # Webhook mode for production with health endpoint
             application.run_webhook(
                 listen="0.0.0.0",
                 port=settings.port,
                 url_path=settings.webhook_path,
                 webhook_url=webhook_full_url,
                 allowed_updates=Update.ALL_TYPES,
+                webhook_server=create_app()
             )
         else:
             logger.info("🔄 Starting polling mode for development")

@@ -29,7 +29,7 @@ services:
         value: /opt/render/project/src
         
       # Telegram Bot (set in Render dashboard)
-      - key: TELEGRAM_TOKEN
+      - key: TELEGRAM_BOT_TOKEN
         sync: false  # Set manually in dashboard
         
       # Google Calendar Configuration
