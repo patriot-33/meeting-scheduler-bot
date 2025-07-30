@@ -81,14 +81,19 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("← Назад", callback_data="nav_main_menu")]
             ]
         else:
+            # OAuth URL generation failed
+            instructions += "\n\n❌ **Ошибка конфигурации**\nОбратитесь к администратору для настройки Google Calendar."
             keyboard = [
                 [InlineKeyboardButton("❓ Частые вопросы", callback_data="calendar_faq")],
+                [InlineKeyboardButton("📧 Сообщить email владельцу", callback_data="send_email_to_owner")],
                 [InlineKeyboardButton("← Назад", callback_data="nav_main_menu")]
             ]
     except Exception as e:
         logger.error(f"Error generating OAuth URL: {e}")
+        instructions += "\n\n❌ **Ошибка системы**\nОбратитесь к администратору."
         keyboard = [
             [InlineKeyboardButton("❓ Частые вопросы", callback_data="calendar_faq")],
+            [InlineKeyboardButton("📧 Сообщить email владельцу", callback_data="send_email_to_owner")],
             [InlineKeyboardButton("← Назад", callback_data="nav_main_menu")]
         ]
     
@@ -105,7 +110,26 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     await query.answer()
     
-    if query.data == "send_email_to_owner":
+    if query.data == "connect_calendar":
+        # Перенаправляем на основную функцию подключения
+        # Создаем фиктивный update объект для команды
+        fake_update = type('obj', (object,), {
+            'effective_user': query.from_user,
+            'message': type('obj', (object,), {
+                'reply_text': query.edit_message_text
+            })()
+        })()
+        await connect_calendar(fake_update, context)
+    elif query.data == "reconnect_calendar":
+        # Переподключение календаря
+        fake_update = type('obj', (object,), {
+            'effective_user': query.from_user,
+            'message': type('obj', (object,), {
+                'reply_text': query.edit_message_text
+            })()
+        })()
+        await connect_calendar(fake_update, context)
+    elif query.data == "send_email_to_owner":
         await send_email_prompt(update, context)
     elif query.data == "calendar_faq":
         await show_calendar_faq(update, context)

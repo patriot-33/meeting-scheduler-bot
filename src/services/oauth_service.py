@@ -31,9 +31,28 @@ class ManagerOAuthService:
     def generate_auth_url(self, telegram_id: int) -> str:
         """Generate OAuth authorization URL for manager."""
         try:
+            # Check Google configuration
+            if not settings.google_service_account_json:
+                logger.error("Google service account JSON not configured")
+                return None
+            
+            if not settings.webhook_url:
+                logger.error("Webhook URL not configured for OAuth callback")
+                return None
+                
+            # Parse and validate JSON
+            try:
+                google_config = json.loads(settings.google_service_account_json)
+                if 'client_id' not in google_config:
+                    logger.error("Invalid Google service account JSON - missing client_id")
+                    return None
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid Google service account JSON: {e}")
+                return None
+            
             # Create OAuth flow
             flow = Flow.from_client_config(
-                json.loads(settings.google_service_account_json),
+                google_config,
                 scopes=self.scopes
             )
             flow.redirect_uri = self.redirect_uri

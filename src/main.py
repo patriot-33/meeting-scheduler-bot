@@ -134,7 +134,7 @@ def main():
     application.add_handler(CallbackQueryHandler(admin.handle_admin_callback, pattern="^admin_"))
     application.add_handler(CallbackQueryHandler(owner.handle_owner_callback, pattern="^owner_"))
     # Note: manager booking callbacks are handled by get_manager_handlers() below
-    application.add_handler(CallbackQueryHandler(manager_calendar.handle_calendar_callback, pattern="^(send_email_to_owner|calendar_faq|connect_calendar)$"))
+    application.add_handler(CallbackQueryHandler(manager_calendar.handle_calendar_callback, pattern="^(send_email_to_owner|calendar_faq|connect_calendar|reconnect_calendar)$"))
     application.add_handler(CallbackQueryHandler(common.handle_navigation_callback, pattern="^nav_"))
     
     # Command handlers (lowest priority)
