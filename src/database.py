@@ -128,19 +128,40 @@ class Statistics(Base):
     last_meeting_date = Column(DateTime)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
-# Database setup - Optimized for small team (7 people, 1-3 concurrent users)
-engine = create_engine(
-    settings.database_url,
-    pool_size=5,  # Small pool for 7-person team
-    max_overflow=2,
-    pool_recycle=3600,  # Recycle connections every hour
-    pool_pre_ping=True,  # Verify connections before use
-    echo=settings.debug,  # Only log SQL in debug mode
-    # PostgreSQL-specific settings for better enum handling
-    connect_args={
-        "options": "-c timezone=UTC"
-    } if settings.database_url.startswith('postgresql') else {}
-)
+# BULLETPROOF Database setup - Database-agnostic with optimized settings
+if settings.database_url.startswith('postgresql'):
+    # PostgreSQL with connection pooling
+    engine = create_engine(
+        settings.database_url,
+        pool_size=5,  # Small pool for 7-person team
+        max_overflow=3,  # Increased overflow for peak usage
+        pool_recycle=3600,  # Recycle connections every hour
+        pool_pre_ping=True,  # Verify connections before use
+        pool_timeout=30,  # Timeout for getting connection from pool
+        echo=settings.debug,  # Only log SQL in debug mode
+        connect_args={
+            "options": "-c timezone=UTC",
+            "application_name": "meeting_scheduler_bot"
+        }
+    )
+elif settings.database_url.startswith('sqlite'):
+    # SQLite with optimized settings (no connection pooling)
+    engine = create_engine(
+        settings.database_url,
+        echo=settings.debug,  # Only log SQL in debug mode
+        pool_pre_ping=True,  # Still verify connections
+        connect_args={
+            "check_same_thread": False,  # Allow multi-threading
+            "timeout": 20  # SQLite lock timeout
+        }
+    )
+else:
+    # Generic database fallback
+    engine = create_engine(
+        settings.database_url,
+        pool_pre_ping=True,
+        echo=settings.debug
+    )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 @contextmanager
@@ -190,13 +211,29 @@ def _ensure_missing_fields_exist():
             logger.info("✅ Поле oauth_credentials успешно добавлено")
         else:
             logger.info("✅ Поле oauth_credentials уже существует")
+        
+        # Проверяем calendar_connected - NEW BOOLEAN FIELD
+        if 'calendar_connected' not in column_names:
+            logger.info("Добавляем поле calendar_connected в таблицу users...")
+            with engine.connect() as conn:
+                if settings.database_url.startswith('postgresql'):
+                    conn.execute(text("ALTER TABLE users ADD COLUMN calendar_connected BOOLEAN DEFAULT FALSE"))
+                else:
+                    # SQLite uses 0/1 for boolean
+                    conn.execute(text("ALTER TABLE users ADD COLUMN calendar_connected BOOLEAN DEFAULT 0"))
+                conn.commit()
+            logger.info("✅ Поле calendar_connected успешно добавлено")
+        else:
+            logger.info("✅ Поле calendar_connected уже существует")
             
     except Exception as e:
         logger.warning(f"⚠️ Не удалось проверить/добавить поля: {e}")
         # Не прерываем инициализацию из-за этого
 
 def init_db():
-    """Initialize database with proper enum handling for PostgreSQL."""
+    """Initialize database with bulletproof error handling and auto-migration."""
+    logger.info("🚀 Initializing database with bulletproof system...")
+    
     try:
         # For PostgreSQL, we need to handle enum types carefully
         if settings.database_url.startswith('postgresql'):
@@ -210,28 +247,47 @@ def init_db():
             # For SQLite and other databases
             Base.metadata.create_all(bind=engine)
             _ensure_missing_fields_exist()
-        logger.info("Database initialization completed successfully")
+        
+        # Run automatic migration if needed
+        try:
+            from migrations.add_calendar_connected_field import upgrade
+            upgrade()
+            logger.info("✅ Auto-migration completed successfully")
+        except Exception as migration_error:
+            logger.warning(f"Auto-migration skipped (may be normal): {migration_error}")
+        
+        logger.info("✅ Database initialization completed successfully")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
         # Try to run enum hotfix if it's an enum-related error
         if "enum" in str(e).lower() or "invalid input value" in str(e).lower() or "does not exist" in str(e).lower():
-            logger.info("Attempting to fix enum compatibility issues with hotfix...")
+            logger.info("Attempting to fix enum compatibility issues with bulletproof fallback...")
             try:
-                # Import and run hotfix
-                import sys
-                import os
-                sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-                from hotfix_enum import hotfix_enum_database
-                hotfix_enum_database()
-                logger.info("Database initialization completed after hotfix")
-            except Exception as hotfix_error:
-                logger.error(f"Hotfix also failed: {hotfix_error}")
-                # Fallback to regular creation
+                # BULLETPROOF: Database-specific enum handling
+                if settings.database_url.startswith('postgresql'):
+                    logger.info("Applying PostgreSQL enum fixes...")
+                    with engine.connect() as conn:
+                        # Drop conflicting enum types
+                        conn.execute(text("DROP TYPE IF EXISTS department CASCADE"))
+                        conn.execute(text("DROP TYPE IF EXISTS userrole CASCADE"))  
+                        conn.execute(text("DROP TYPE IF EXISTS userstatus CASCADE"))
+                        conn.commit()
+                    logger.info("Dropped existing enum types")
+                
+                # Recreate all tables with fresh schema
+                Base.metadata.drop_all(bind=engine, checkfirst=True)
+                Base.metadata.create_all(bind=engine)
+                logger.info("✅ Database initialization successful with enum fixes")
+                
+            except Exception as enum_fix_error:
+                logger.error(f"Enum fix failed: {enum_fix_error}")
+                
+                # Final bulletproof fallback
                 try:
-                    Base.metadata.create_all(bind=engine)
-                    logger.info("Fallback initialization successful")
-                except Exception as fallback_error:
-                    logger.error(f"All initialization methods failed: {fallback_error}")
+                    Base.metadata.create_all(bind=engine, checkfirst=True)
+                    logger.info("✅ Bulletproof fallback initialization successful")
+                except Exception as final_error:
+                    logger.error(f"❌ All initialization methods failed: {final_error}")
                     raise
         else:
             raise

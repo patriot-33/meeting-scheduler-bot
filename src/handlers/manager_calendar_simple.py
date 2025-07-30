@@ -224,19 +224,17 @@ async def set_calendar_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
         
         except Exception as e:
-            # Rollback transaction on any error
-            db.rollback()
-            logger.error(f"Transaction failed during calendar setup: {e}")
+            # BULLETPROOF: Single exception handler with proper rollback
+            try:
+                db.rollback()
+            except Exception as rollback_error:
+                logger.error(f"Rollback failed: {rollback_error}")
+            
+            logger.error(f"Database error during calendar setup: {e}")
             await update.message.reply_text(
                 "❌ **Критическая ошибка при настройке календаря**\n\n"
                 "Транзакция отменена. Данные не изменены.\n"
                 "Попробуйте позже или обратитесь к администратору."
-            )
-            
-        except Exception as e:
-            logger.error(f"Database error in calendar setup: {e}")
-            await update.message.reply_text(
-                "❌ Ошибка базы данных. Обратитесь к администратору."
             )
 
 async def simple_calendar_faq(update: Update, context: ContextTypes.DEFAULT_TYPE):
