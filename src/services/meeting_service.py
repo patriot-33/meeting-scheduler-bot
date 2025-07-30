@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Dict, Optional
 
 from src.database import Meeting, User, MeetingStatus, UserStatus, UserRole
 from src.services.google_calendar import GoogleCalendarService
@@ -103,7 +103,7 @@ class MeetingService:
             return True
         return False
     
-    def get_available_slots(self, days_ahead: int = 14) -> List[datetime]:
+    def get_available_slots(self, days_ahead: int = 14) -> Dict[str, List[str]]:
         """Get available meeting slots when both owners are free."""
         return OwnerService.get_available_slots_for_both_owners(days_ahead)
     

@@ -270,9 +270,9 @@ class OwnerService:
             return True
     
     @staticmethod
-    def get_available_slots_for_both_owners(days_ahead: int = 14) -> List[datetime]:
+    def get_available_slots_for_both_owners(days_ahead: int = 14) -> Dict[str, List[str]]:
         """Получить доступные слоты, когда свободны оба владельца"""
-        available_slots = []
+        available_slots = {}
         
         # Генерируем слоты на указанное количество дней вперед
         for day_offset in range(1, days_ahead + 1):
@@ -282,6 +282,9 @@ class OwnerService:
             if check_date.weekday() >= 5:  # Суббота=5, Воскресенье=6
                 continue
             
+            date_str = check_date.strftime('%Y-%m-%d')
+            day_slots = []
+            
             # Проверяем каждый временной слот
             for time_slot in TIME_SLOTS:
                 slot_datetime = datetime.combine(
@@ -290,7 +293,10 @@ class OwnerService:
                 )
                 
                 if OwnerService.are_both_owners_available(slot_datetime):
-                    available_slots.append(slot_datetime)
+                    day_slots.append(time_slot)
+            
+            if day_slots:
+                available_slots[date_str] = day_slots
         
         return available_slots
     

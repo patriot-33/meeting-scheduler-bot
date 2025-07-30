@@ -12,7 +12,7 @@ from telegram.ext import (
 
 from src.config import settings
 from src.database import init_db
-from src.handlers import registration, admin, manager, common, owner
+from src.handlers import registration, admin, manager, common, owner, manager_calendar
 from src.services.reminder_service import ReminderService
 from src.utils.scheduler import setup_scheduler
 
@@ -111,13 +111,23 @@ def main():
     application = Application.builder().token(settings.telegram_bot_token).build()
     
     # Add handlers
+    # ConversationHandlers first (highest priority)
+    application.add_handler(registration.get_registration_handler())
+    application.add_handler(owner.get_owner_conversation_handler())
+    
+    # Callback query handlers (medium priority)
+    application.add_handler(CallbackQueryHandler(admin.handle_admin_callback, pattern="^admin_"))
+    application.add_handler(CallbackQueryHandler(owner.handle_owner_callback, pattern="^owner_"))
+    application.add_handler(CallbackQueryHandler(manager.handle_booking_callback, pattern="^book_"))
+    application.add_handler(CallbackQueryHandler(manager.handle_cancel_callback, pattern="^cancel_"))
+    application.add_handler(CallbackQueryHandler(manager_calendar.handle_calendar_callback, pattern="^(send_email_to_owner|calendar_faq|connect_calendar)$"))
+    application.add_handler(CallbackQueryHandler(common.handle_navigation_callback, pattern="^nav_"))
+    
+    # Command handlers (lowest priority)
     # Start command
     application.add_handler(CommandHandler("start", common.start_command))
     application.add_handler(CommandHandler("help", common.help_command))
     application.add_handler(CommandHandler("cancel", common.cancel_command))
-    
-    # Registration conversation
-    application.add_handler(registration.get_registration_handler())
     
     # Admin commands
     application.add_handler(CommandHandler("admin", admin.admin_menu))
@@ -129,7 +139,6 @@ def main():
     
     # Owner commands
     application.add_handler(CommandHandler("owner", owner.owner_menu))
-    application.add_handler(owner.get_owner_conversation_handler())
     
     # Manager commands
     application.add_handler(CommandHandler("schedule", manager.show_available_slots))
@@ -139,13 +148,8 @@ def main():
     application.add_handler(CommandHandler("trip", manager.set_business_trip))
     application.add_handler(CommandHandler("active", manager.set_active))
     application.add_handler(CommandHandler("profile", manager.show_profile))
-    
-    # Callback query handlers
-    application.add_handler(CallbackQueryHandler(admin.handle_admin_callback, pattern="^admin_"))
-    application.add_handler(CallbackQueryHandler(owner.handle_owner_callback, pattern="^owner_"))
-    application.add_handler(CallbackQueryHandler(manager.handle_booking_callback, pattern="^book_"))
-    application.add_handler(CallbackQueryHandler(manager.handle_cancel_callback, pattern="^cancel_"))
-    application.add_handler(CallbackQueryHandler(common.handle_navigation_callback, pattern="^nav_"))
+    application.add_handler(CommandHandler("calendar", manager_calendar.connect_calendar))
+    application.add_handler(CommandHandler("email", manager_calendar.save_manager_email))
     
     # Error handler
     application.add_error_handler(error_handler)

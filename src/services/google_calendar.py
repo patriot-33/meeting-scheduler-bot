@@ -91,7 +91,7 @@ class GoogleCalendarService:
         return available_slots
     
     def create_meeting(self, manager_name: str, department: str, 
-                      date: datetime, time_str: str) -> Tuple[str, str]:
+                      date: datetime, time_str: str, manager_email: Optional[str] = None) -> Tuple[str, str]:
         """Create a meeting in both calendars and return event ID and Meet link."""
         hour, minute = map(int, time_str.split(':'))
         
@@ -99,6 +99,20 @@ class GoogleCalendarService:
             date.replace(hour=hour, minute=minute, second=0, microsecond=0)
         )
         end_time = start_time + timedelta(minutes=settings.meeting_duration_minutes)
+        
+        # Attendees list
+        attendees = [
+            {'email': settings.google_calendar_id_1},
+            {'email': settings.google_calendar_id_2},
+        ]
+        
+        # Add manager email if provided
+        if manager_email:
+            attendees.append({
+                'email': manager_email,
+                'displayName': manager_name,
+                'responseStatus': 'needsAction'
+            })
         
         event = {
             'summary': f'Созвон с {department}',
@@ -111,10 +125,7 @@ class GoogleCalendarService:
                 'dateTime': end_time.isoformat(),
                 'timeZone': settings.timezone,
             },
-            'attendees': [
-                {'email': settings.google_calendar_id_1},
-                {'email': settings.google_calendar_id_2},
-            ],
+            'attendees': attendees,
             'conferenceData': {
                 'createRequest': {
                     'requestId': f"meeting-{datetime.now().timestamp()}",

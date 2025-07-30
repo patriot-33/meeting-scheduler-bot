@@ -294,37 +294,12 @@ async def show_managers_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode='HTML')
 
 async def show_pending_managers(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показать ожидающих одобрения руководителей"""
-    with get_db() as db:
-        pending_users = db.query(User).filter(User.role == UserRole.PENDING).all()
-        
-        if not pending_users:
-            keyboard = [[InlineKeyboardButton("← Назад", callback_data="owner_managers")]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            text = "✅ Нет руководителей, ожидающих одобрения"
-            await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
-            return
-        
-        text = "⏳ <b>Ожидают одобрения:</b>\n\n"
-        keyboard = []
-        
-        for user in pending_users:
-            text += f"👤 <b>{user.first_name} {user.last_name}</b>\n"
-            text += f"🏢 Отдел: {user.department.value}\n"
-            text += f"🆔 ID: {user.telegram_id}\n"
-            if user.telegram_username:
-                text += f"📱 @{user.telegram_username}\n"
-            text += "\n"
-            
-            keyboard.append([
-                InlineKeyboardButton(f"✅ Одобрить {user.first_name}", callback_data=f"owner_approve_{user.id}"),
-                InlineKeyboardButton(f"❌ Отклонить", callback_data=f"owner_reject_{user.id}")
-            ])
-        
-        keyboard.append([InlineKeyboardButton("← Назад", callback_data="owner_managers")])
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode='HTML')
+    """Показать ожидающих одобрения руководителей - делегируем в admin.py"""
+    # Импортируем функцию из admin для избежания дублирования
+    from src.handlers.admin import show_pending_users_callback
+    # Устанавливаем правильный callback для возврата в меню владельца
+    context.user_data['return_to'] = 'owner_managers'
+    await show_pending_users_callback(update, context)
 
 async def show_approved_managers(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать одобренных руководителей"""
@@ -396,38 +371,9 @@ async def approve_manager(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def reject_manager(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отклонить заявку руководителя"""
-    query = update.callback_query
-    user_id = int(query.data.split('_')[2])
-    
-    with get_db() as db:
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            await query.answer("❌ Пользователь не найден")
-            return
-        
-        # Уведомляем пользователя
-        try:
-            await context.bot.send_message(
-                chat_id=user.telegram_id,
-                text=f"❌ <b>Заявка отклонена</b>\n\n"
-                     f"К сожалению, ваша заявка на должность руководителя отдела не была одобрена.\n\n"
-                     f"📞 Обратитесь к владельцу бизнеса для получения дополнительной информации.",
-                parse_mode='HTML'
-            )
-        except Exception as e:
-            logger.error(f"Failed to notify rejected user {user.id}: {e}")
-        
-        # Удаляем пользователя
-        db.delete(user)
-        db.commit()
-        
-        await query.edit_message_text(
-            f"❌ <b>Заявка отклонена</b>\n\n"
-            f"👤 {user.first_name} {user.last_name}\n"
-            f"🏢 Отдел: {user.department.value}",
-            parse_mode='HTML'
-        )
+    """Отклонить руководителя - делегируем в admin.py"""
+    from src.handlers.admin import reject_user_callback
+    await reject_user_callback(update, context, int(update.callback_query.data.split('_')[2]))
 
 async def handle_owner_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик callback для владельцев"""
@@ -510,9 +456,14 @@ def get_owner_conversation_handler():
             CallbackQueryHandler(show_availability_menu, pattern="^owner_availability$"),
             CallbackQueryHandler(owner_menu, pattern="^owner_menu$"),
             CommandHandler('owner', owner_menu),
-            CommandHandler('cancel', cancel_conversation)
+            CommandHandler('cancel', cancel_conversation),
+            CommandHandler('admin', lambda update, context: ConversationHandler.END),
+            CommandHandler('start', lambda update, context: ConversationHandler.END),
+            CommandHandler('help', lambda update, context: ConversationHandler.END),
+            CommandHandler('schedule', lambda update, context: ConversationHandler.END),
+            CommandHandler('my_meetings', lambda update, context: ConversationHandler.END)
         ],
-        per_message=True
+        per_message=False
     )
 
 async def cancel_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):

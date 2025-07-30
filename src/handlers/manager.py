@@ -7,6 +7,8 @@ from sqlalchemy import and_
 from src.database import get_db, User, Meeting, UserRole, UserStatus, MeetingStatus, Reminder
 from src.services.meeting_service import MeetingService
 from src.services.owner_service import OwnerService
+from src.services.google_calendar import GoogleCalendarService
+from src.services.reminder_service import ReminderService
 from src.config import settings
 from src.utils.decorators import require_registration
 
@@ -50,10 +52,10 @@ async def show_available_slots(update: Update, context: ContextTypes.DEFAULT_TYP
                 await update.message.reply_text(
                     "❌ К сожалению, на ближайшие 2 недели нет свободных слотов.\n\n"
                     "🕐 Слоты доступны только когда свободны оба владельца бизнеса.\n"
-                    "📞 Обратитесь к владельцам для уточнения их расписания."
-                "Попробуйте позже или свяжитесь с администратором."
-            )
-            return
+                    "📞 Обратитесь к владельцам для уточнения их расписания.\n"
+                    "Попробуйте позже или свяжитесь с администратором."
+                )
+                return
         
         # Create keyboard with available slots
         keyboard = []
@@ -153,9 +155,10 @@ async def handle_booking_callback(update: Update, context: ContextTypes.DEFAULT_
         # Create meeting in Google Calendar
         event_id, meet_link = calendar_service.create_meeting(
             f"{user.first_name} {user.last_name}",
-            user.department,
+            user.department.value,  # Convert enum to string
             meeting_date,
-            time_str
+            time_str,
+            user.email  # Pass manager's email
         )
         
         # Save to database

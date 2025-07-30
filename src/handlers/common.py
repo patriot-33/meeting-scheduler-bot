@@ -73,7 +73,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 welcome_text += (
                     "👨‍💼 Руководитель отдела:\n"
                     "/schedule - Запланировать встречу\n"
-                    "/my_meetings - Мои встречи\n\n"
+                    "/my_meetings - Мои встречи\n"
+                    "/calendar - Подключить Google Calendar\n\n"
                 )
             
             welcome_text += (
@@ -90,7 +91,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🤖 Помощь по боту\n\n"
         "📅 **Планирование встреч:**\n"
         "/schedule - Показать доступные слоты\n"
-        "/my_meetings - Мои запланированные встречи\n\n"
+        "/my_meetings - Мои запланированные встречи\n"
+        "/calendar - Подключение Google Calendar\n\n"
         "👤 **Статус:**\n"
         "/vacation - Отметить отпуск\n"
         "/sick - Отметить больничный\n"
