@@ -7,15 +7,17 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Enhanced application settings with better environment variable support."""
     
-    # Telegram Bot
-    telegram_token: str = Field(..., description="Telegram Bot Token")
+    # Telegram Bot (support both old and new env var names)
+    telegram_token: str = Field(..., env="TELEGRAM_BOT_TOKEN", description="Telegram Bot Token")
+    telegram_bot_token: Optional[str] = Field(None, description="Legacy telegram token field")
+    admin_telegram_ids: Optional[str] = Field(None, env="ADMIN_TELEGRAM_IDS", description="Admin telegram IDs")
     
     # Database
     database_url: str = Field(..., description="Database connection URL")
     
     # Google Calendar (Enhanced with multiple authentication methods)
-    google_calendar_id_1: Optional[str] = Field(None, description="Primary Google Calendar ID")
-    google_calendar_id_2: Optional[str] = Field(None, description="Secondary Google Calendar ID")
+    google_calendar_id_1: Optional[str] = Field(None, env="GOOGLE_CALENDAR_ID_1", description="Primary Google Calendar ID")
+    google_calendar_id_2: Optional[str] = Field(None, env="GOOGLE_CALENDAR_ID_2", description="Secondary Google Calendar ID")
     
     # Google Service Account - Multiple methods supported
     google_service_account_file: Optional[str] = Field(
@@ -24,26 +26,29 @@ class Settings(BaseSettings):
     )
     google_service_account_json: Optional[str] = Field(
         None, 
+        env="GOOGLE_SERVICE_ACCOUNT_JSON",
         description="Google Service Account JSON as environment variable string (preferred for production)"
     )
     
     # Application Settings
-    webhook_url: Optional[str] = Field(None, description="Webhook URL for production")
-    port: int = Field(default=8443, description="Application port")
-    host: str = Field(default="0.0.0.0", description="Application host")
+    webhook_url: Optional[str] = Field(None, env="WEBHOOK_URL", description="Webhook URL for production")
+    port: int = Field(default=8443, env="PORT", description="Application port")
+    host: str = Field(default="0.0.0.0", env="HOST", description="Application host")
     
     # Feature Flags
     google_calendar_enabled: bool = Field(
         default=True, 
+        env="GOOGLE_CALENDAR_ENABLED",
         description="Enable/disable Google Calendar integration"
     )
     fallback_mode: bool = Field(
         default=True, 
+        env="FALLBACK_MODE",
         description="Enable fallback functionality when external services are unavailable"
     )
     
     # Logging
-    log_level: str = Field(default="INFO", description="Logging level")
+    log_level: str = Field(default="INFO", env="LOG_LEVEL", description="Logging level")
     log_format: str = Field(
         default="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         description="Log format"
@@ -53,8 +58,8 @@ class Settings(BaseSettings):
     health_check_enabled: bool = Field(default=True, description="Enable health check endpoint")
     
     # Development vs Production
-    environment: str = Field(default="development", description="Environment: development/production")
-    debug: bool = Field(default=False, description="Debug mode")
+    environment: str = Field(default="development", env="ENVIRONMENT", description="Environment: development/production")
+    debug: bool = Field(default=False, env="DEBUG", description="Debug mode")
     
     class Config:
         env_file = ".env"
@@ -70,6 +75,18 @@ class Settings(BaseSettings):
     def use_webhook(self) -> bool:
         """Determine if webhook should be used."""
         return self.is_production and self.webhook_url is not None
+    
+    @property
+    def bot_token(self) -> str:
+        """Get bot token with backward compatibility."""
+        return self.telegram_token or self.telegram_bot_token or ""
+    
+    @property
+    def admin_ids_list(self) -> list[int]:
+        """Get admin IDs list with backward compatibility."""
+        if self.admin_telegram_ids:
+            return [int(id.strip()) for id in self.admin_telegram_ids.split(',') if id.strip()]
+        return []
     
     def validate_google_calendar_config(self) -> bool:
         """Validate Google Calendar configuration."""
@@ -110,8 +127,8 @@ def validate_configuration() -> tuple[bool, list[str]]:
     errors = []
     
     # Required settings
-    if not settings.telegram_token:
-        errors.append("TELEGRAM_TOKEN is required")
+    if not settings.bot_token:
+        errors.append("TELEGRAM_BOT_TOKEN is required")
     
     if not settings.database_url:
         errors.append("DATABASE_URL is required")
