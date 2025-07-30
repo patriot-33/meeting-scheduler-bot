@@ -149,16 +149,17 @@ def get_db():
     finally:
         db.close()
 
-def _ensure_email_field_exists():
-    """Проверить и добавить поле email в таблицу users если его нет"""
+def _ensure_missing_fields_exist():
+    """Проверить и добавить отсутствующие поля в таблицу users"""
     try:
         from sqlalchemy import text, inspect
         
-        # Проверяем существование колонки email
+        # Проверяем существование колонок
         inspector = inspect(engine)
         columns = inspector.get_columns('users')
         column_names = [col['name'] for col in columns]
         
+        # Проверяем email
         if 'email' not in column_names:
             logger.info("Добавляем поле email в таблицу users...")
             with engine.connect() as conn:
@@ -167,9 +168,19 @@ def _ensure_email_field_exists():
             logger.info("✅ Поле email успешно добавлено")
         else:
             logger.info("✅ Поле email уже существует")
+        
+        # Проверяем google_calendar_id - CRITICAL FIX
+        if 'google_calendar_id' not in column_names:
+            logger.info("Добавляем поле google_calendar_id в таблицу users...")
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN google_calendar_id VARCHAR(255)"))
+                conn.commit()
+            logger.info("✅ Поле google_calendar_id успешно добавлено")
+        else:
+            logger.info("✅ Поле google_calendar_id уже существует")
             
     except Exception as e:
-        logger.warning(f"⚠️ Не удалось проверить/добавить поле email: {e}")
+        logger.warning(f"⚠️ Не удалось проверить/добавить поля: {e}")
         # Не прерываем инициализацию из-за этого
 
 def init_db():
@@ -181,12 +192,12 @@ def init_db():
             # Create all tables and enum types (не удаляет существующие данные)
             Base.metadata.create_all(bind=engine)
             
-            # Проверяем и добавляем поле email если его нет
-            _ensure_email_field_exists()
+            # Проверяем и добавляем отсутствующие поля
+            _ensure_missing_fields_exist()
         else:
             # For SQLite and other databases
             Base.metadata.create_all(bind=engine)
-            _ensure_email_field_exists()
+            _ensure_missing_fields_exist()
         logger.info("Database initialization completed successfully")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
