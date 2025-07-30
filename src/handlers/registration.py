@@ -19,15 +19,15 @@ FIRST_NAME, LAST_NAME, DEPARTMENT = range(3)
 
 # Departments list
 DEPARTMENTS = [
-    "@>4068",
-    "0@:5B8=3",
-    " 07@01>B:0",
+    "Продажи",
+    "Маркетинг",
+    "Разработка",
     "IT",
     "HR",
-    "$8=0=AK",
-    "?5@0F88",
-    ">38AB8:0",
-    ">445@6:0",
+    "Финансы",
+    "Операции",
+    "Логистика",
+    "Поддержка",
 ]
 
 async def start_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -41,18 +41,18 @@ async def start_registration(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if existing_user:
             if existing_user.role == UserRole.PENDING:
                 await update.message.reply_text(
-                    "9 0H0 70O2:0 =0 @538AB@0F8N C65 >B?@02;5=0 8 >68405B >4>1@5=8O 04<8=8AB@0B>@><."
+                    "⏳ Ваша заявка на регистрацию уже отправлена и ожидает одобрения администратором."
                 )
             elif existing_user.role in [UserRole.ADMIN, UserRole.MANAGER]:
                 await update.message.reply_text(
-                    " K C65 70@538AB@8@>20=K! A?>;L7C9B5 /help 4;O ?@>A<>B@0 4>ABC?=KE :><0=4."
+                    "Вы уже зарегистрированы! Используйте /help для просмотра доступных команд."
                 )
             return ConversationHandler.END
     
     await update.message.reply_text(
-        "=K >1@> ?>60;>20BL!\n\n"
-        "/ 1>B 4;O ?;0=8@>20=8O 2AB@5G A @C:>2>48B5;O<8 >B45;>2.\n\n"
-        ";O =0G0;0 40209B5 ?>7=0:><8<AO. 0: 0A 7>2CB? 2548B5 20H5 8<O:"
+        "Добро пожаловать!\n\n"
+        "Я бот для планирования встреч с руководителями отделов.\n\n"
+        "Для начала давайте познакомимся. Как вас зовут? Введите ваше имя:"
     )
     
     return FIRST_NAME
@@ -63,7 +63,7 @@ async def get_first_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if len(first_name) < 2:
         await update.message.reply_text(
-            " <O A;8H:>< :>@>B:>5. >60;C9AB0, 22548B5 ?>;=>5 8<O:"
+            "Имя слишком короткое. Пожалуйста, введите полное имя:"
         )
         return FIRST_NAME
     
@@ -80,7 +80,7 @@ async def get_last_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if len(last_name) < 2:
         await update.message.reply_text(
-            " $0<8;8O A;8H:>< :>@>B:0O. >60;C9AB0, 22548B5 ?>;=CN D0<8;8N:"
+            "Фамилия слишком короткая. Пожалуйста, введите полную фамилию:"
         )
         return LAST_NAME
     
@@ -98,7 +98,7 @@ async def get_last_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        "< K15@8B5 20H >B45;:",
+        "🏢 Выберите ваш отдел:",
         reply_markup=reply_markup
     )
     
@@ -132,25 +132,25 @@ async def get_department(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.commit()
     
     await query.edit_message_text(
-        f" !?0A81> 70 @538AB@0F8N!\n\n"
+        f"✅ Спасибо за регистрацию!\n\n"
         f"=d {first_name} {last_name}\n"
-        f"< B45;: {department}\n\n"
-        f"=Q 0H0 70O2:0 >B?@02;5=0 =0 >4>1@5=85 04<8=8AB@0B>@C.\n"
-        f"K ?>;CG8B5 C254><;5=85, :>340 20H0 70O2:0 1C45B >4>1@5=0."
+        f"< B45;: {department}\n\n"
+        f"⏳ Ваша заявка отправлена на одобрение администратору.\n"
+        f"Вы получите уведомление, когда ваша заявка будет одобрена."
     )
     
     # Notify admins
     for admin_id in settings.admin_ids_list:
         try:
             keyboard = [[
-                InlineKeyboardButton(" 4>1@8BL", callback_data=f"admin_approve_{user_id}"),
-                InlineKeyboardButton("L B:;>=8BL", callback_data=f"admin_reject_{user_id}")
+                InlineKeyboardButton("✅ Одобрить", callback_data=f"admin_approve_{user_id}"),
+                InlineKeyboardButton("❌ Отклонить", callback_data=f"admin_reject_{user_id}")
             ]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await context.bot.send_message(
                 chat_id=admin_id,
-                text=f"< >20O 70O2:0 =0 @538AB@0F8N:\n\n"
+                text=f"📝 Новая заявка на регистрацию:\n\n"
                      f"< {user_id}\n"
                      f"=d {first_name} {last_name}\n"
                      f"= @{username}\n"
@@ -168,7 +168,7 @@ async def get_department(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cancel_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel the registration process."""
     await update.message.reply_text(
-        "=  538AB@0F8O >B<5=5=0. A?>;L7C9B5 /start 4;O =0G0;0 70=>2>."
+        "❌ Регистрация отменена. Используйте /start для начала заново."
     )
     context.user_data.clear()
     return ConversationHandler.END

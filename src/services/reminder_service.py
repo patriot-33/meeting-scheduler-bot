@@ -100,24 +100,24 @@ class ReminderService:
             
             if days == '7':
                 message = (
-                    f"= 0?><8=0=85\n\n"
-                    f"@>H;> 7 4=59 A ?>A;54=59 2AB@5G8.\n"
-                    f">60;C9AB0, =07=0GLB5 A;54CNICN 2AB@5GC.\n\n"
-                    f"06<8B5 /schedule 4;O ?@>A<>B@0 4>ABC?=KE A;>B>2."
+                    f"🔔 Напоминание\n\n"
+                    f"Прошло 7 дней с последней встречи.\n"
+                    f"Пожалуйста, назначьте следующую встречу.\n\n"
+                    f"Нажмите /schedule для просмотра доступных слотов."
                 )
             elif days == '3':
                 message = (
-                    f"� 06=>5 =0?><8=0=85\n\n"
-                    f"AB0;>AL 3 4=O 4> :@09=53> A@>:0 =07=0G5=8O 2AB@5G8.\n"
-                    f">60;C9AB0, >1O70B5;L=> =07=0GLB5 2AB@5GC!\n\n"
-                    f"/schedule - >A<>B@5BL 4>ABC?=K5 A;>BK"
+                    f"⚠️ Важное напоминание\n\n"
+                    f"Осталось 3 дня до крайнего срока назначения встречи.\n"
+                    f"Пожалуйста, обязательно назначьте встречу!\n\n"
+                    f"/schedule - Посмотреть доступные слоты"
                 )
             else:  # 1 day
                 message = (
-                    f"=4 @8B8G=>5 =0?><8=0=85\n\n"
-                    f"AB0;AO 1 45=L 4> :@09=53> A@>:0!\n"
-                    f"A;8 2K =5 =07=0G8B5 2AB@5GC, 04<8=8AB@0B>@K 1C4CB C254><;5=K.\n\n"
-                    f"/schedule - 07=0G8BL 2AB@5GC !'!"
+                    f"🚨 Критичное напоминание\n\n"
+                    f"Остался 1 день до крайнего срока!\n"
+                    f"Если вы не назначите встречу, администраторы будут уведомлены.\n\n"
+                    f"/schedule - Назначить встречу СЕЙЧАС"
                 )
         
         elif reminder.reminder_type == 'meeting_1h':
@@ -127,11 +127,11 @@ class ReminderService:
             date_str = meeting.scheduled_time.strftime('%d.%m.%Y')
             
             message = (
-                f"= 0?><8=0=85 > 2AB@5G5\n\n"
-                f"'5@57 1 G0A C 20A 2AB@5G0!\n\n"
+                f"🔔 Напоминание > 2AB@5G5\n\n"
+                f"Через 1 час у вас встреча!\n\n"
                 f"=� {date_str} 2 {time_str}\n"
-                f"< Google Meet: {meeting.google_meet_link}\n\n"
-                f">43>B>2LB5AL : A>72>=C!"
+                f"< Google Meet: {meeting.google_meet_link}\n\n"
+                f"Подготовьтесь к созвону!"
             )
         
         await bot.send_message(
@@ -161,13 +161,13 @@ class ReminderService:
     
     async def _notify_admins_about_overdue(self, bot: Bot, overdue_users: List[User]):
         """Notify admins about users with overdue meetings."""
-        message = "=� @>A@>G5==K5 2AB@5G8\n\n"
-        message += "!;54CNI85 @C:>2>48B5;8 =5 =07=0G8;8 2-=545;L=CN 2AB@5GC:\n\n"
+        message = "⏰ Просроченные встречи\n\n"
+        message += "Следующие руководители не назначили 2-недельную встречу:\n\n"
         
         for user in overdue_users:
-            message += f"" {user.first_name} {user.last_name} ({user.department})\n"
+            message += f"👤 {user.first_name} {user.last_name} ({user.department})\n"
         
-        message += "\n>60;C9AB0, A2O68B5AL A =8<8 4;O =07=0G5=8O 2AB@5G8."
+        message += "\nПожалуйста, свяжитесь с ними для назначения встречи."
         
         for admin_id in settings.admin_ids_list:
             try:

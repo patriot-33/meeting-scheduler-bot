@@ -54,7 +54,7 @@ async def show_available_slots(update: Update, context: ContextTypes.DEFAULT_TYP
         
         # Create keyboard with available slots
         keyboard = []
-        message_text = "Доступные слоты для встреч:\n\n"
+        Доступные слоты для встреч:
         
         for date_str, slots in available_slots.items():
             if slots:  # Only show dates with available slots
@@ -81,8 +81,7 @@ async def show_available_slots(update: Update, context: ContextTypes.DEFAULT_TYP
         if not keyboard:
             await update.message.reply_text(
                 "На доступные дни нет свободных слотов."
-            )
-            return
+                        return
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -114,8 +113,8 @@ async def handle_booking_callback(update: Update, context: ContextTypes.DEFAULT_
             
             if not user or user.status != UserStatus.ACTIVE:
                 await query.edit_message_text(
-                    "Нельзя назначить встречу в неактивном статусе."
-                )
+                    "� 5;L7O =07=0G8BL 2AB@5GC 2 =50:B82=>< AB0BCA5."
+                                    "Нельзя назначить встречу в неактивном статусе."
                 return
             
             # Check if user already has a meeting scheduled for next 2 weeks
@@ -131,9 +130,9 @@ async def handle_booking_callback(update: Update, context: ContextTypes.DEFAULT_
             if recent_meeting:
                 next_allowed = recent_meeting.scheduled_time + timedelta(days=14)
                 await query.edit_message_text(
-                    f"У вас уже есть запланированная встреча.\n\n"
-                    f"Следующую встречу можно назначить не ранее {next_allowed.strftime('%d.%m.%Y')}."
-                )
+                    f"� # 20A C65 5ABL 70?;0=8@>20==0O 2AB@5G0.\n\n"
+                                        f"У вас уже есть запланированная встреча.\n\n"
+                                    f"Следующую встречу можно назначить не ранее {next_allowed.strftime('%d.%m.%Y')}."
                 return
         
         # Create meeting
@@ -143,8 +142,8 @@ async def handle_booking_callback(update: Update, context: ContextTypes.DEFAULT_
         # Double-check slot availability
         if not calendar_service.check_slot_availability(meeting_date, time_str):
             await query.edit_message_text(
-                "К сожалению, этот слот уже занят. Попробуйте выбрать другое время."
-            )
+                "�  A>60;5=8N, MB>B A;>B C65 70=OB. >?@>1C9B5 2K1@0BL 4@C3>5 2@5<O."
+                            "К сожалению, этот слот уже занят. Попробуйте выбрать другое время."
             return
         
         # Create meeting in Google Calendar
@@ -180,28 +179,28 @@ async def handle_booking_callback(update: Update, context: ContextTypes.DEFAULT_
             try:
                 await context.bot.send_message(
                     chat_id=admin_id,
-                    text=f"📅 Новая встреча\n\n"
-                         f"👤 {user.first_name} {user.last_name}\n"
-                         f"🏢 {user.department}\n"
-                         f"📅 {scheduled_time.strftime('%d.%m.%Y в %H:%M')}\n"
-                         f"🔗 {meet_link}"
-                )
+                    text=f"=� >20O 2AB@5G0\n\n"
+                                             text=f"📅 Новая встреча\n\n"
+                                                  f"👤 {user.first_name} {user.last_name}\n"
+                                                  f"🏢 {user.department}\n"
+                                                  f"📅 {scheduled_time.strftime('%d.%m.%Y в %H:%M')}\n"
+                                         f"🔗 {meet_link}"
             except Exception as e:
                 logger.error(f"Failed to notify admin {admin_id}: {e}")
         
         await query.edit_message_text(
-            f"Встреча успешно назначена!\n\n"
-            f"📅 Дата: {scheduled_time.strftime('%d.%m.%Y')}\n"
-            f"⏰ Время: {time_str}\n"
-            f"🔗 Google Meet: {meet_link}\n\n"
-            f"Вы получите напоминание за 1 час до встречи."
-        )
+            f" AB@5G0 CA?5H=> =07=0G5=0!\n\n"
+                        f"Встреча успешно назначена\!\n\n"
+                        f"📅 Дата: {scheduled_time.strftime('%d.%m.%Y')}\n"
+                        f"⏰ Время: {time_str}\n"
+                        f"🔗 Google Meet: {meet_link}\n\n"
+                    f"Вы получите напоминание за 1 час до встречи."
         
     except Exception as e:
         logger.error(f"Error booking meeting: {e}")
         await query.edit_message_text(
-            "Произошла ошибка при назначении встречи. Попробуйте позже."
-        )
+            "� @>87>H;0 >H81:0 ?@8 =07=0G5=88 2AB@5G8. >?@>1C9B5 ?>765."
+                    "Произошла ошибка при назначении встречи. Попробуйте позже."
 
 @require_registration
 async def show_my_meetings(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -229,7 +228,7 @@ async def show_my_meetings(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         keyboard = []
         for meeting in meetings:
-            time_str = meeting.scheduled_time.strftime('%d.%m.%Y в %H:%M')
+            time_str = meeting.scheduled_time.strftime('%d.%m.%Y 2 %H:%M')
             message_text += f"📅 {time_str}\n"
             
             # Add cancel button
@@ -262,8 +261,8 @@ async def handle_cancel_callback(update: Update, context: ContextTypes.DEFAULT_T
         
         if not meeting:
             await query.edit_message_text(
-                "Встреча не найдена."
-            )
+                "� AB@5G0 =5 =0945=0."
+                            "Встреча не найдена."
             return
         
         # Cancel in Google Calendar
@@ -284,32 +283,32 @@ async def handle_cancel_callback(update: Update, context: ContextTypes.DEFAULT_T
         db.commit()
         
         await query.edit_message_text(
-            f"❌ Встреча отменена\n\n"
-            f"📅 {meeting.scheduled_time.strftime('%d.%m.%Y в %H:%M')}\n\n"
-            f"Можете назначить новую встречу через /schedule"
-        )
+            f"L AB@5G0 >B<5=5=0\n\n"
+                        f"❌ Встреча отменена\n\n"
+                        f"📅 {meeting.scheduled_time.strftime('%d.%m.%Y в %H:%M')}\n\n"
+                    f"Можете назначить новую встречу через /schedule"
 
 # Status management functions
 @require_registration
 async def set_vacation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Set user status to vacation."""
-    await _set_user_status(update, context, UserStatus.VACATION, "В отпуске")
-
+    await _set_user_status(update, context, UserStatus.VACATION, "<4 >B?CA:")
+     await _set_user_status(update, context, UserStatus.VACATION, "В отпуске")
 @require_registration
 async def set_sick_leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Set user status to sick leave."""
-    await _set_user_status(update, context, UserStatus.SICK_LEAVE, "На больничном")
-
+    await _set_user_status(update, context, UserStatus.SICK_LEAVE, "> 1>;L=8G=K9")
+     await _set_user_status(update, context, UserStatus.SICK_LEAVE, "На больничном")
 @require_registration
 async def set_business_trip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Set user status to business trip."""
-    await _set_user_status(update, context, UserStatus.BUSINESS_TRIP, "В командировке")
-
+    await _set_user_status(update, context, UserStatus.BUSINESS_TRIP, " :><0=48@>2:0")
+     await _set_user_status(update, context, UserStatus.BUSINESS_TRIP, "В командировке")
 @require_registration
 async def set_active(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Set user status to active."""
-    await _set_user_status(update, context, UserStatus.ACTIVE, "Активный")
-
+    await _set_user_status(update, context, UserStatus.ACTIVE, " 0:B82=K9")
+     await _set_user_status(update, context, UserStatus.ACTIVE, "Активный")
 async def _set_user_status(update: Update, context: ContextTypes.DEFAULT_TYPE, status: UserStatus, status_text: str):
     """Helper function to set user status."""
     user_id = update.effective_user.id
@@ -321,8 +320,8 @@ async def _set_user_status(update: Update, context: ContextTypes.DEFAULT_TYPE, s
         db.commit()
         
         await update.message.reply_text(
-            f"Ваш статус изменен на: {status_text}"
-        )
+            f" 0H AB0BCA 87<5=5= =0: {status_text}"
+                    f"Ваш статус изменен на: {status_text}"
         
         # If returning from non-active status, schedule reminder for next meeting
         if old_status != UserStatus.ACTIVE and status == UserStatus.ACTIVE:
@@ -361,23 +360,23 @@ async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ).order_by(Meeting.scheduled_time.desc()).first()
         
         status_emoji = {
-            UserStatus.ACTIVE: "✅",
-            UserStatus.VACATION: "🏖️",
-            UserStatus.SICK_LEAVE: "🏥",
-            UserStatus.BUSINESS_TRIP: "✈️"
-        }.get(user.status, "❓")
-        
+            UserStatus.ACTIVE: "",
+                        UserStatus.ACTIVE: "✅",
+                        UserStatus.VACATION: "🏖️",
+                        UserStatus.SICK_LEAVE: "🏥",
+                    UserStatus.BUSINESS_TRIP: "✈️"
+                 }.get(user.status, "❓")
         profile_text = (
-            f"👤 **Мой профиль**\n\n"
-            f"📝 Имя: {user.first_name} {user.last_name}\n"
-            f"🏢 Отдел: {user.department}\n"
-            f"{status_emoji} Статус: {user.status.value}\n\n"
-            f"📊 **Статистика:**\n"
-            f"📈 Всего встреч: {total_meetings}\n"
-            f"✅ Проведено: {completed_meetings}\n"
-        )
+            f"=d **>9 ?@>D8;L**\n\n"
+                        f"👤 **Мой профиль**\n\n"
+                        f"📝 Имя: {user.first_name} {user.last_name}\n"
+                        f"🏢 Отдел: {user.department}\n"
+                        f"{status_emoji} Статус: {user.status.value}\n\n"
+                        f"📊 **Статистика:**\n"
+                        f"📈 Всего встреч: {total_meetings}\n"
+                    f"✅ Проведено: {completed_meetings}\n"
         
         if last_meeting:
-            profile_text += f"📅 Последняя встреча: {last_meeting.scheduled_time.strftime('%d.%m.%Y')}\n"
-        
+            profile_text += f"" >A;54=OO 2AB@5G0: {last_meeting.scheduled_time.strftime('%d.%m.%Y')}\n"
+                     profile_text += f"📅 Последняя встреча: {last_meeting.scheduled_time.strftime('%d.%m.%Y')}\n"
         await update.message.reply_text(profile_text, parse_mode='Markdown')
