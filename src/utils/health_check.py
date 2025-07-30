@@ -1,6 +1,7 @@
 """Simple health check utility for small team deployment."""
 import logging
 from datetime import datetime
+from sqlalchemy import text
 from src.database import engine
 from src.config import settings
 
@@ -10,7 +11,7 @@ def check_database_connection():
     """Check if database is accessible."""
     try:
         with engine.connect() as conn:
-            conn.execute("SELECT 1")
+            conn.execute(text("SELECT 1"))
         return True, "Database OK"
     except Exception as e:
         return False, f"Database error: {str(e)[:100]}"
