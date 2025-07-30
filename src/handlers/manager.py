@@ -1,22 +1,31 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
-from datetime import datetime, timedelta
+from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
+from datetime import datetime, timedelta, date
 import logging
-from sqlalchemy import and_
 
-from database import get_db, User, Meeting, UserRole, UserStatus, MeetingStatus, Reminder
+from database import get_db, User, UserRole, UserStatus, Meeting, MeetingStatus
 from services.meeting_service import MeetingService
-from services.owner_service import OwnerService
-from services.google_calendar import GoogleCalendarService
+from services.google_calendar import google_calendar_service
 from services.reminder_service import ReminderService
 from config import settings
 from utils.decorators import require_registration
 
 logger = logging.getLogger(__name__)
 
+# Русские названия дней недели
+RUSSIAN_WEEKDAYS = {
+    'Monday': 'Понедельник',
+    'Tuesday': 'Вторник', 
+    'Wednesday': 'Среда',
+    'Thursday': 'Четверг',
+    'Friday': 'Пятница',
+    'Saturday': 'Суббота',
+    'Sunday': 'Воскресенье'
+}
+
 @require_registration
 async def show_available_slots(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show available meeting slots when owners are free."""
+    """Show available dates for meetings."""
     user_id = update.effective_user.id
     
     with get_db() as db:
@@ -27,16 +36,11 @@ async def show_available_slots(update: Update, context: ContextTypes.DEFAULT_TYP
                 "❌ Данная функция доступна только руководителям отделов."
             )
             return
-            
+        
+        # Check user status
         if user.status != UserStatus.ACTIVE:
-            status_text = {
-                UserStatus.VACATION: "В отпуске",
-                UserStatus.SICK_LEAVE: "На больничном",
-                UserStatus.BUSINESS_TRIP: "В командировке"
-            }.get(user.status, "неактивном статусе")
-            
             await update.message.reply_text(
-                f"❌ Вы находитесь в статусе: {status_text}.\n\n"
+                "⏸ Вы находитесь в неактивном статусе.\n"
                 f"Для назначения встреч сначала вернитесь в активный статус: /active"
             )
             return
@@ -57,31 +61,25 @@ async def show_available_slots(update: Update, context: ContextTypes.DEFAULT_TYP
                 )
                 return
         
-        # Create keyboard with available slots
+        # Create keyboard with available dates (only days, not time slots)
         keyboard = []
-        message_text = "Доступные слоты для встреч:\n\n"
+        message_text = "📅 Выберите день для встречи:\n\n"
         
-        for date_str, slots in available_slots.items():
+        sorted_dates = sorted(available_slots.keys())
+        
+        for date_str in sorted_dates:
+            slots = available_slots[date_str]
             if slots:  # Only show dates with available slots
                 date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-                day_name = date_obj.strftime('%A')
+                english_day = date_obj.strftime('%A')
+                russian_day = RUSSIAN_WEEKDAYS.get(english_day, english_day)
                 formatted_date = date_obj.strftime('%d.%m.%Y')
                 
-                message_text += f"📅 **{day_name}, {formatted_date}**\n"
+                # Show day with number of available slots
+                button_text = f"{russian_day}, {formatted_date} ({len(slots)} слотов)"
+                callback_data = f"date_{date_str}"
                 
-                row = []
-                for slot in slots:
-                    callback_data = f"book_{date_str}_{slot}"
-                    row.append(InlineKeyboardButton(slot, callback_data=callback_data))
-                    
-                    if len(row) == 2:  # Two buttons per row
-                        keyboard.append(row)
-                        row = []
-                
-                if row:  # Add remaining buttons
-                    keyboard.append(row)
-                
-                message_text += "\n"
+                keyboard.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
         
         if not keyboard:
             await update.message.reply_text(
@@ -93,297 +91,247 @@ async def show_available_slots(update: Update, context: ContextTypes.DEFAULT_TYP
         
         await update.message.reply_text(
             message_text,
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
+            reply_markup=reply_markup
         )
         
     except Exception as e:
-        logger.error(f"Error getting available slots: {e}")
+        logger.error(f"Error showing available slots: {e}")
         await update.message.reply_text(
-            "Произошла ошибка при получении доступных слотов. Попробуйте позже."
+            "Произошла ошибка при загрузке слотов. Попробуйте позже."
         )
 
-async def handle_booking_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle slot booking callback."""
+async def show_day_slots(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show available time slots for selected date."""
+    query = update.callback_query
+    await query.answer()
+    
+    # Extract date from callback data
+    date_str = query.data.replace('date_', '')
+    
+    try:
+        with get_db() as db:
+            meeting_service = MeetingService(db)
+            available_slots = meeting_service.get_available_slots(days_ahead=14)
+            
+            if date_str not in available_slots:
+                await query.edit_message_text(
+                    "❌ К сожалению, на этот день слоты больше недоступны."
+                )
+                return
+            
+            slots = available_slots[date_str]
+            if not slots:
+                await query.edit_message_text(
+                    "❌ На этот день нет доступных слотов."
+                )
+                return
+            
+            # Format date for display
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+            english_day = date_obj.strftime('%A')
+            russian_day = RUSSIAN_WEEKDAYS.get(english_day, english_day)
+            formatted_date = date_obj.strftime('%d.%m.%Y')
+            
+            # Create keyboard with time slots
+            keyboard = []
+            message_text = f"🕐 Выберите время на {russian_day}, {formatted_date}:\n\n"
+            
+            # Group slots in rows of 3
+            row = []
+            for slot in slots:
+                callback_data = f"book_{date_str}_{slot}"
+                row.append(InlineKeyboardButton(slot, callback_data=callback_data))
+                
+                if len(row) == 3:  # Three time slots per row
+                    keyboard.append(row)
+                    row = []
+            
+            if row:  # Add remaining buttons
+                keyboard.append(row)
+            
+            # Add back button
+            keyboard.append([InlineKeyboardButton("← Назад к выбору дня", callback_data="back_to_dates")])
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                message_text,
+                reply_markup=reply_markup
+            )
+            
+    except Exception as e:
+        logger.error(f"Error showing day slots: {e}")
+        await query.edit_message_text(
+            "Произошла ошибка при загрузке слотов. Попробуйте позже."
+        )
+
+async def back_to_dates(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Go back to date selection."""
+    query = update.callback_query
+    await query.answer()
+    
+    # Re-show the date selection
+    await show_available_slots_inline(query)
+
+async def show_available_slots_inline(query):
+    """Helper function to show date selection inline."""
+    try:
+        with get_db() as db:
+            meeting_service = MeetingService(db)
+            available_slots = meeting_service.get_available_slots(days_ahead=14)
+            
+            if not available_slots:
+                await query.edit_message_text(
+                    "❌ К сожалению, нет доступных слотов."
+                )
+                return
+        
+        # Create keyboard with available dates
+        keyboard = []
+        message_text = "📅 Выберите день для встречи:\n\n"
+        
+        sorted_dates = sorted(available_slots.keys())
+        
+        for date_str in sorted_dates:
+            slots = available_slots[date_str]
+            if slots:
+                date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+                english_day = date_obj.strftime('%A')
+                russian_day = RUSSIAN_WEEKDAYS.get(english_day, english_day)
+                formatted_date = date_obj.strftime('%d.%m.%Y')
+                
+                button_text = f"{russian_day}, {formatted_date} ({len(slots)} слотов)"
+                callback_data = f"date_{date_str}"
+                
+                keyboard.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            message_text,
+            reply_markup=reply_markup
+        )
+        
+    except Exception as e:
+        logger.error(f"Error showing available slots inline: {e}")
+        await query.edit_message_text(
+            "Произошла ошибка при загрузке слотов. Попробуйте позже."
+        )
+
+async def book_meeting_slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Book a specific meeting slot."""
     query = update.callback_query
     await query.answer()
     
     user_id = update.effective_user.id
-    callback_data = query.data  # format: book_2024-01-15_14:00
+    
+    # Parse callback data: book_2025-01-15_14:00
+    callback_parts = query.data.split('_')
+    if len(callback_parts) != 3:
+        await query.edit_message_text("❌ Ошибка в данных слота.")
+        return
+        
+    date_str = callback_parts[1]
+    time_str = callback_parts[2]
     
     try:
-        _, date_str, time_str = callback_data.split('_')
-        
         with get_db() as db:
             user = db.query(User).filter(User.telegram_id == user_id).first()
-            
-            if not user or user.status != UserStatus.ACTIVE:
-                await query.edit_message_text(
-                    "Нельзя назначить встречу в неактивном статусе."
-                )
+            if not user:
+                await query.edit_message_text("❌ Пользователь не найден.")
                 return
             
-            # Check if user already has a meeting scheduled for next 2 weeks
-            two_weeks_ago = datetime.now() - timedelta(days=14)
-            recent_meeting = db.query(Meeting).filter(
-                and_(
-                    Meeting.manager_id == user.id,
-                    Meeting.scheduled_time > two_weeks_ago,
-                    Meeting.status == MeetingStatus.SCHEDULED
-                )
+            meeting_service = MeetingService(db)
+            
+            # Parse meeting datetime
+            meeting_date = datetime.strptime(date_str, '%Y-%m-%d')
+            time_obj = datetime.strptime(time_str, '%H:%M').time()
+            meeting_datetime = datetime.combine(meeting_date.date(), time_obj)
+            
+            # Check if user already has a meeting this week
+            week_start = meeting_date - timedelta(days=meeting_date.weekday())
+            week_end = week_start + timedelta(days=6)
+            
+            existing_meeting = db.query(Meeting).filter(
+                Meeting.manager_id == user.id,
+                Meeting.scheduled_time >= week_start,
+                Meeting.scheduled_time <= week_end,
+                Meeting.status == MeetingStatus.SCHEDULED
             ).first()
             
-            if recent_meeting:
-                next_allowed = recent_meeting.scheduled_time + timedelta(days=14)
+            if existing_meeting:
+                next_allowed = existing_meeting.scheduled_time + timedelta(days=7)
                 await query.edit_message_text(
-                    f"У вас уже есть запланированная встреча.\n\n"
+                    f"⚠️ У вас уже есть запланированная встреча на эту неделю.\n"
                     f"Следующую встречу можно назначить не ранее {next_allowed.strftime('%d.%m.%Y')}."
                 )
                 return
         
-        # Create meeting
-        calendar_service = GoogleCalendarService()
-        meeting_date = datetime.strptime(date_str, '%Y-%m-%d')
-        
-        # Double-check slot availability
-        if not calendar_service.check_slot_availability(meeting_date, time_str):
+        # Check slot availability using meeting service
+        if not meeting_service.is_slot_available(meeting_datetime):
             await query.edit_message_text(
-                "К сожалению, этот слот уже занят. Попробуйте выбрать другое время."
+                "❌ К сожалению, этот слот уже занят. Выберите другое время."
             )
             return
         
-        # Create meeting in Google Calendar
-        event_id, meet_link = calendar_service.create_meeting(
-            f"{user.first_name} {user.last_name}",
-            user.department.value,  # Convert enum to string
-            meeting_date,
-            time_str,
-            user.email  # Pass manager's email
-        )
-        
-        # Save to database
-        hour, minute = map(int, time_str.split(':'))
-        scheduled_time = meeting_date.replace(hour=hour, minute=minute)
-        
-        with get_db() as db:
-            meeting = Meeting(
-                manager_id=user.id,
-                scheduled_time=scheduled_time,
-                google_event_id=event_id,
-                google_meet_link=meet_link,
-                status=MeetingStatus.SCHEDULED
-            )
-            db.add(meeting)
-            db.commit()
+        # Create meeting
+        try:
+            meeting = meeting_service.create_meeting(user.id, meeting_datetime)
             
-            # Schedule reminders
-            reminder_service = ReminderService()
-            await reminder_service.schedule_meeting_reminders(meeting.id)
-            await reminder_service.schedule_next_meeting_reminders(user.id, scheduled_time)
-        
-        # Notify admins
-        for admin_id in settings.admin_ids_list:
-            try:
-                await context.bot.send_message(
-                    chat_id=admin_id,
-                    text=f"📅 Новая встреча\n\n"
-                         f"👤 {user.first_name} {user.last_name}\n"
-                         f"🏢 {user.department}\n"
-                         f"📅 {scheduled_time.strftime('%d.%m.%Y в %H:%M')}\n"
-                         f"🔗 {meet_link}"
+            if meeting:
+                # Format success message
+                english_day = meeting_datetime.strftime('%A')
+                russian_day = RUSSIAN_WEEKDAYS.get(english_day, english_day)
+                formatted_date = meeting_datetime.strftime('%d.%m.%Y')
+                
+                success_message = (
+                    f"✅ Встреча успешно запланирована!\n\n"
+                    f"📅 {russian_day}, {formatted_date}\n"
+                    f"🕐 {time_str}\n"
+                    f"👤 {user.first_name} {user.last_name}\n"
+                    f"🏢 {user.department.value}\n\n"
                 )
-            except Exception as e:
-                logger.error(f"Failed to notify admin {admin_id}: {e}")
-        
-        await query.edit_message_text(
-            f"Встреча успешно назначена!\n\n"
-            f"📅 Дата: {scheduled_time.strftime('%d.%m.%Y')}\n"
-            f"⏰ Время: {time_str}\n"
-            f"🔗 Google Meet: {meet_link}\n\n"
-            f"Вы получите напоминание за 1 час до встречи."
-        )
-        
+                
+                # Add Google Meet link if available
+                if meeting.google_meet_link:
+                    success_message += f"🔗 [Ссылка на встречу]({meeting.google_meet_link})\n\n"
+                
+                success_message += (
+                    "📧 Приглашения отправлены всем участникам.\n"
+                    "⏰ Напоминания будут отправлены за 7, 3 и 1 день до встречи."
+                )
+                
+                await query.edit_message_text(
+                    success_message,
+                    parse_mode='Markdown',
+                    disable_web_page_preview=True
+                )
+                
+                logger.info(f"Meeting created successfully: {meeting.id}")
+                
+            else:
+                await query.edit_message_text(
+                    "❌ Не удалось создать встречу. Попробуйте позже или обратитесь к администратору."
+                )
+                
+        except Exception as e:
+            logger.error(f"Error creating meeting: {e}")
+            await query.edit_message_text(
+                "❌ Произошла ошибка при создании встречи. Попробуйте позже."
+            )
+                
     except Exception as e:
         logger.error(f"Error booking meeting: {e}")
         await query.edit_message_text(
-            "Произошла ошибка при назначении встречи. Попробуйте позже."
+            "❌ Произошла ошибка при бронировании встречи. Попробуйте позже."
         )
 
-@require_registration
-async def show_my_meetings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show user's scheduled meetings."""
-    user_id = update.effective_user.id
-    
-    with get_db() as db:
-        user = db.query(User).filter(User.telegram_id == user_id).first()
-        
-        meetings = db.query(Meeting).filter(
-            and_(
-                Meeting.manager_id == user.id,
-                Meeting.status == MeetingStatus.SCHEDULED,
-                Meeting.scheduled_time > datetime.now()
-            )
-        ).order_by(Meeting.scheduled_time).all()
-        
-        if not meetings:
-            await update.message.reply_text(
-                "У вас нет запланированных встреч. Нажмите /schedule для назначения новой встречи."
-            )
-            return
-        
-        message_text = "Ваши запланированные встречи:\n\n"
-        
-        keyboard = []
-        for meeting in meetings:
-            time_str = meeting.scheduled_time.strftime('%d.%m.%Y в %H:%M')
-            message_text += f"📅 {time_str}\n"
-            
-            # Add cancel button
-            keyboard.append([
-                InlineKeyboardButton(
-                    f"❌ Отменить {meeting.scheduled_time.strftime('%d.%m')}",
-                    callback_data=f"cancel_{meeting.id}"
-                )
-            ])
-        
-        reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
-        await update.message.reply_text(message_text, reply_markup=reply_markup)
-
-async def handle_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle meeting cancellation."""
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = update.effective_user.id
-    meeting_id = int(query.data.split('_')[1])
-    
-    with get_db() as db:
-        user = db.query(User).filter(User.telegram_id == user_id).first()
-        meeting = db.query(Meeting).filter(
-            and_(
-                Meeting.id == meeting_id,
-                Meeting.manager_id == user.id
-            )
-        ).first()
-        
-        if not meeting:
-            await query.edit_message_text(
-                "Встреча не найдена."
-            )
-            return
-        
-        # Cancel in Google Calendar
-        try:
-            calendar_service = GoogleCalendarService()
-            calendar_service.cancel_meeting(meeting.google_event_id)
-        except Exception as e:
-            logger.error(f"Error canceling Google Calendar event: {e}")
-        
-        # Update database
-        meeting.status = MeetingStatus.CANCELLED
-        db.commit()
-        
-        # Cancel related reminders
-        db.query(Reminder).filter(
-            Reminder.meeting_id == meeting.id
-        ).update({'sent': True})
-        db.commit()
-        
-        await query.edit_message_text(
-            f"❌ Встреча отменена\n\n"
-            f"📅 {meeting.scheduled_time.strftime('%d.%m.%Y в %H:%M')}\n\n"
-            f"Можете назначить новую встречу через /schedule"
-        )
-
-# Status management functions
-@require_registration
-async def set_vacation(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Set user status to vacation."""
-    await _set_user_status(update, context, UserStatus.VACATION, "В отпуске")
-
-@require_registration
-async def set_sick_leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Set user status to sick leave."""
-    await _set_user_status(update, context, UserStatus.SICK_LEAVE, "На больничном")
-
-@require_registration
-async def set_business_trip(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Set user status to business trip."""
-    await _set_user_status(update, context, UserStatus.BUSINESS_TRIP, "В командировке")
-
-@require_registration
-async def set_active(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Set user status to active."""
-    await _set_user_status(update, context, UserStatus.ACTIVE, "Активный")
-
-async def _set_user_status(update: Update, context: ContextTypes.DEFAULT_TYPE, status: UserStatus, status_text: str):
-    """Helper function to set user status."""
-    user_id = update.effective_user.id
-    
-    with get_db() as db:
-        user = db.query(User).filter(User.telegram_id == user_id).first()
-        old_status = user.status
-        user.status = status
-        db.commit()
-        
-        await update.message.reply_text(
-            f"Ваш статус изменен на: {status_text}"
-        )
-        
-        # If returning from non-active status, schedule reminder for next meeting
-        if old_status != UserStatus.ACTIVE and status == UserStatus.ACTIVE:
-            last_meeting = db.query(Meeting).filter(
-                and_(
-                    Meeting.manager_id == user.id,
-                    Meeting.status == MeetingStatus.COMPLETED
-                )
-            ).order_by(Meeting.scheduled_time.desc()).first()
-            
-            if last_meeting:
-                reminder_service = ReminderService()
-                await reminder_service.schedule_next_meeting_reminders(
-                    user.id, last_meeting.scheduled_time
-                )
-
-@require_registration
-async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show user profile."""
-    user_id = update.effective_user.id
-    
-    with get_db() as db:
-        user = db.query(User).filter(User.telegram_id == user_id).first()
-        
-        # Get meeting statistics
-        total_meetings = db.query(Meeting).filter(Meeting.manager_id == user.id).count()
-        completed_meetings = db.query(Meeting).filter(
-            and_(
-                Meeting.manager_id == user.id,
-                Meeting.status == MeetingStatus.COMPLETED
-            )
-        ).count()
-        
-        last_meeting = db.query(Meeting).filter(
-            Meeting.manager_id == user.id
-        ).order_by(Meeting.scheduled_time.desc()).first()
-        
-        status_emoji = {
-            UserStatus.ACTIVE: "✅",
-            UserStatus.VACATION: "🏖️",
-            UserStatus.SICK_LEAVE: "🏥",
-            UserStatus.BUSINESS_TRIP: "✈️"
-        }.get(user.status, "❓")
-        
-        profile_text = (
-            f"👤 **Мой профиль**\n\n"
-            f"📝 Имя: {user.first_name} {user.last_name}\n"
-            f"🏢 Отдел: {user.department}\n"
-            f"{status_emoji} Статус: {user.status.value}\n\n"
-            f"📊 **Статистика:**\n"
-            f"📈 Всего встреч: {total_meetings}\n"
-            f"✅ Проведено: {completed_meetings}\n"
-        )
-        
-        if last_meeting:
-            profile_text += f"📅 Последняя встреча: {last_meeting.scheduled_time.strftime('%d.%m.%Y')}\n"
-        
-        await update.message.reply_text(profile_text, parse_mode='Markdown')
+# Handler registration
+def get_manager_handlers():
+    """Return list of manager-related handlers."""
+    return [
+        CommandHandler('schedule', show_available_slots),
+        CallbackQueryHandler(show_day_slots, pattern=r'^date_\d{4}-\d{2}-\d{2}$'),
+        CallbackQueryHandler(back_to_dates, pattern='^back_to_dates$'),
+        CallbackQueryHandler(book_meeting_slot, pattern=r'^book_\d{4}-\d{2}-\d{2}_\d{2}:\d{2}$'),
+    ]

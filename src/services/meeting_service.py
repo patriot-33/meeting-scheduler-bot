@@ -4,14 +4,14 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 
 from database import Meeting, User, MeetingStatus, UserStatus, UserRole
-from services.google_calendar import GoogleCalendarService
+from services.google_calendar import google_calendar_service
 from services.reminder_service import ReminderService
 from services.owner_service import OwnerService
 
 class MeetingService:
     def __init__(self, db: Session):
         self.db = db
-        self.calendar_service = GoogleCalendarService()
+        self.calendar_service = google_calendar_service
         self.reminder_service = ReminderService()
     
     def create_meeting(self, manager_id: int, scheduled_time: datetime) -> Optional[Meeting]:
@@ -26,14 +26,56 @@ class MeetingService:
             if not OwnerService.are_both_owners_available(scheduled_time):
                 raise ValueError("Owners are not available at this time")
             
-            # Create meeting in Google Calendar
-            time_str = scheduled_time.strftime('%H:%M')
-            event_id, meet_link = self.calendar_service.create_meeting(
-                f"{manager.first_name} {manager.last_name}",
-                manager.department.value,
-                scheduled_time,
-                time_str
-            )
+            # Create meeting in Google Calendar if available
+            event_id = None
+            meet_link = None
+            
+            if self.calendar_service.is_available:
+                # Get owner emails for meeting participants
+                owners = OwnerService.get_all_owners()
+                owner_emails = []
+                
+                # For now, we'll use a placeholder email for owners
+                # In a real implementation, you'd store owner emails in the database
+                for owner in owners:
+                    # You might want to add an email field to the User model
+                    owner_emails.append(f"owner{owner.id}@company.com")  # Placeholder
+                
+                time_str = scheduled_time.strftime('%H:%M')
+                
+                # Use the primary Google Calendar for creating meetings
+                from config import settings
+                if hasattr(settings, 'google_calendar_id_1') and settings.google_calendar_id_1:
+                    event_id, meet_link = self.calendar_service.create_meeting_with_owners(
+                        settings.google_calendar_id_1,
+                        f"{manager.first_name} {manager.last_name}",
+                        manager.department.value,
+                        scheduled_time,
+                        time_str,
+                        owner_emails,
+                        manager_email=None  # Add manager email if available
+                    )
+                else:
+                    # Fallback to basic event creation
+                    event_data = {
+                        'summary': f'Созвон с {manager.department.value}',
+                        'description': f'Встреча с руководителем {manager.first_name} {manager.last_name}',
+                        'start': {
+                            'dateTime': scheduled_time.isoformat(),
+                            'timeZone': 'Europe/Moscow',
+                        },
+                        'end': {
+                            'dateTime': (scheduled_time + timedelta(minutes=60)).isoformat(),
+                            'timeZone': 'Europe/Moscow',
+                        }
+                    }
+                    
+                    if hasattr(settings, 'google_calendar_id_1') and settings.google_calendar_id_1:
+                        event_result = self.calendar_service.create_event(settings.google_calendar_id_1, event_data)
+                        if isinstance(event_result, tuple):
+                            event_id, meet_link = event_result
+                        else:
+                            event_id = event_result
             
             # Save to database
             meeting = Meeting(

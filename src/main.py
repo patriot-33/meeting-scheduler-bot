@@ -137,11 +137,17 @@ def main():
     # Owner commands
     application.add_handler(CommandHandler("owner", owner.owner_menu))
     
-    # Manager commands
-    application.add_handler(CommandHandler("schedule", manager.show_available_slots))
-    application.add_handler(CommandHandler("my_meetings", manager.show_my_meetings))
-    application.add_handler(CommandHandler("vacation", manager.set_vacation))
-    application.add_handler(CommandHandler("sick", manager.set_sick_leave))
+    # Manager commands - new improved handlers
+    for handler in manager.get_manager_handlers():
+        application.add_handler(handler)
+    
+    # Existing manager commands (if they exist)
+    try:
+        application.add_handler(CommandHandler("my_meetings", manager.show_my_meetings))
+        application.add_handler(CommandHandler("vacation", manager.set_vacation))
+        application.add_handler(CommandHandler("sick", manager.set_sick_leave))
+    except AttributeError:
+        logger.info("Some manager commands not available - using new handlers only")
     application.add_handler(CommandHandler("trip", manager.set_business_trip))
     application.add_handler(CommandHandler("active", manager.set_active))
     application.add_handler(CommandHandler("profile", manager.show_profile))
