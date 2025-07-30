@@ -22,9 +22,9 @@ class MeetingService:
             if not manager:
                 return None
             
-            # Check if both owners are available at this time
+            # Check if owners are available at this time
             if not OwnerService.are_both_owners_available(scheduled_time):
-                raise ValueError("One or both owners are not available at this time")
+                raise ValueError("Owners are not available at this time")
             
             # Create meeting in Google Calendar
             time_str = scheduled_time.strftime('%H:%M')
@@ -104,12 +104,12 @@ class MeetingService:
         return False
     
     def get_available_slots(self, days_ahead: int = 14) -> Dict[str, List[str]]:
-        """Get available meeting slots when both owners are free."""
+        """Get available meeting slots when owners are free."""
         return OwnerService.get_available_slots_for_both_owners(days_ahead)
     
     def is_slot_available(self, slot_datetime: datetime) -> bool:
         """Check if a specific slot is available for booking."""
-        # Check if both owners are available
+        # Check if owners are available
         if not OwnerService.are_both_owners_available(slot_datetime):
             return False
         

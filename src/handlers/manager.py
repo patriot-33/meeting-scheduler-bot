@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 @require_registration
 async def show_available_slots(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show available meeting slots when both owners are free."""
+    """Show available meeting slots when owners are free."""
     user_id = update.effective_user.id
     
     with get_db() as db:
@@ -45,13 +45,13 @@ async def show_available_slots(update: Update, context: ContextTypes.DEFAULT_TYP
         with get_db() as db:
             meeting_service = MeetingService(db)
             
-            # Get available slots when both owners are free
+            # Get available slots when owners are free
             available_slots = meeting_service.get_available_slots(days_ahead=14)
             
             if not available_slots:
                 await update.message.reply_text(
                     "❌ К сожалению, на ближайшие 2 недели нет свободных слотов.\n\n"
-                    "🕐 Слоты доступны только когда свободны оба владельца бизнеса.\n"
+                    "🕐 Слоты доступны только когда свободны владельцы бизнеса.\n"
                     "📞 Обратитесь к владельцам для уточнения их расписания.\n"
                     "Попробуйте позже или свяжитесь с администратором."
                 )

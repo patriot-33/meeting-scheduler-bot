@@ -225,14 +225,19 @@ class OwnerService:
     
     @staticmethod
     def are_both_owners_available(slot_datetime: datetime) -> bool:
-        """Проверить, свободны ли оба владельца в указанное время"""
+        """Проверить, свободны ли владельцы в указанное время (минимум 1 владелец для тестирования)"""
         owners = OwnerService.get_all_owners()
-        if len(owners) < 2:
-            logger.warning("⚠️ В системе меньше 2 владельцев")
+        if len(owners) < 1:
+            logger.warning("⚠️ В системе нет владельцев")
             return False
         
-        # Проверяем каждого владельца
-        for owner in owners[:2]:  # Берем первых двух владельцев
+        if len(owners) < 2:
+            logger.info("ℹ️ В системе 1 владелец - режим тестирования")
+            # Проверяем единственного владельца
+            return OwnerService.is_owner_available_at_time(owners[0].id, slot_datetime)
+        
+        # Проверяем каждого владельца (берем первых двух)
+        for owner in owners[:2]:
             if not OwnerService.is_owner_available_at_time(owner.id, slot_datetime):
                 return False
         
@@ -271,7 +276,7 @@ class OwnerService:
     
     @staticmethod
     def get_available_slots_for_both_owners(days_ahead: int = 14) -> Dict[str, List[str]]:
-        """Получить доступные слоты, когда свободны оба владельца"""
+        """Получить доступные слоты, когда свободны владельцы (поддерживает 1+ владельца)"""
         available_slots = {}
         
         # Генерируем слоты на указанное количество дней вперед
