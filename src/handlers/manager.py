@@ -12,8 +12,7 @@ from utils.decorators import require_registration
 
 logger = logging.getLogger(__name__)
 
-# Create MeetingService instance
-meeting_service = MeetingService()
+# MeetingService will be initialized in functions with DB context
 
 async def notify_owners_about_meeting(context: ContextTypes.DEFAULT_TYPE, meeting, manager: User):
     """Send telegram notification to all owners about new meeting."""
@@ -99,7 +98,7 @@ async def show_available_slots(update: Update, context: ContextTypes.DEFAULT_TYP
     
     try:
         with get_db() as db:
-            # Use global meeting_service instance
+            meeting_service = MeetingService(db)
             
             # Get available slots when owners are free
             available_slots = meeting_service.get_available_slots(days_ahead=14)
@@ -162,7 +161,7 @@ async def show_day_slots(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         with get_db() as db:
-            # Use global meeting_service instance
+            meeting_service = MeetingService(db)
             available_slots = meeting_service.get_available_slots(days_ahead=14)
             
             if date_str not in available_slots:
@@ -229,7 +228,7 @@ async def show_available_slots_inline(query):
     """Helper function to show date selection inline."""
     try:
         with get_db() as db:
-            # Use global meeting_service instance
+            meeting_service = MeetingService(db)
             available_slots = meeting_service.get_available_slots(days_ahead=14)
             
             if not available_slots:
@@ -368,6 +367,7 @@ async def cancel_meeting_callback(update: Update, context: ContextTypes.DEFAULT_
                 return
             
             # Cancel the meeting
+            meeting_service = MeetingService(db)
             success = meeting_service.cancel_meeting(meeting.id)
             
             if success:
@@ -460,7 +460,7 @@ async def book_meeting_slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.edit_message_text("❌ Пользователь не найден.")
                 return
             
-            # Use global meeting_service instance
+            meeting_service = MeetingService(db)
             
             # Parse meeting datetime
             meeting_date = datetime.strptime(date_str, '%Y-%m-%d')
