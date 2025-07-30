@@ -69,6 +69,19 @@ def main():
     
     # Initialize database
     try:
+        # Force run hotfix for enum compatibility on first startup
+        if settings.database_url.startswith('postgresql') and settings.force_enum_hotfix:
+            logger.info("🔥 Running enum hotfix for PostgreSQL compatibility...")
+            try:
+                import sys
+                import os
+                sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+                from hotfix_enum import hotfix_enum_database
+                hotfix_enum_database()
+                logger.info("✅ Enum hotfix completed")
+            except Exception as hotfix_error:
+                logger.warning(f"⚠️ Hotfix failed, continuing with normal init: {hotfix_error}")
+        
         init_db()
         logger.info("✅ Database initialized")
     except Exception as e:

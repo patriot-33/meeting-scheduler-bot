@@ -50,6 +50,16 @@ def hotfix_enum_database():
                 conn.execute(text("CREATE TYPE meetingstatus AS ENUM ('scheduled', 'completed', 'cancelled', 'no_show');"))
                 conn.execute(text("CREATE TYPE department AS ENUM ('Фарм отдел', 'Фин отдел', 'HR отдел', 'Тех отдел', 'ИТ отдел', 'Биздев отдел', 'Геймдев проект');"))
                 
+                # Verify enum creation
+                logger.info("Verifying enum types...")
+                result = conn.execute(text("SELECT enumlabel FROM pg_enum WHERE enumtypid = 'userrole'::regtype;"))
+                userrole_values = [row[0] for row in result.fetchall()]
+                logger.info(f"UserRole enum values: {userrole_values}")
+                
+                result = conn.execute(text("SELECT enumlabel FROM pg_enum WHERE enumtypid = 'department'::regtype;"))
+                department_values = [row[0] for row in result.fetchall()]
+                logger.info(f"Department enum values: {department_values}")
+                
                 trans.commit()
                 logger.info("✅ Database schema reset completed!")
                 

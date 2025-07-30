@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     # Application
     debug: bool = Field(default=False, env="DEBUG")
     log_level: str = Field(default="INFO", env="LOG_LEVEL")
+    force_enum_hotfix: bool = Field(default=True, env="FORCE_ENUM_HOTFIX")
     
     # Webhook (optional)
     webhook_url: str = Field(default="", env="WEBHOOK_URL")
