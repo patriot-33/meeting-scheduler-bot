@@ -192,25 +192,68 @@ def main():
     # Run the bot
     try:
         if settings.webhook_url:
+            # Use manual webhook setup with custom aiohttp server
             webhook_full_url = f"{settings.webhook_url}{settings.webhook_path}"
             logger.info(f"🌐 Starting webhook mode on port {settings.port}")
             logger.info(f"🔗 Webhook URL: {webhook_full_url}")
             
-            # Create webhook with health endpoint
-            async def create_app():
-                app = web.Application()
-                app.router.add_get('/health', health_handler)
-                return app
+            import asyncio
+            from aiohttp import web as aio_web
             
-            # Webhook mode for production with health endpoint
-            application.run_webhook(
-                listen="0.0.0.0",
-                port=settings.port,
-                url_path=settings.webhook_path,
-                webhook_url=webhook_full_url,
-                allowed_updates=Update.ALL_TYPES,
-                webhook_server=create_app()
-            )
+            async def webhook_handler(request):
+                """Handle incoming webhook updates."""
+                try:
+                    data = await request.json()
+                    update = Update.de_json(data, application.bot)
+                    if update:
+                        await application.process_update(update)
+                    return aio_web.Response(status=200)
+                except Exception as e:
+                    logger.error(f"Webhook handler error: {e}")
+                    return aio_web.Response(status=500)
+            
+            async def start_webhook_server():
+                """Start combined webhook and health server."""
+                app = aio_web.Application()
+                
+                # Add webhook handler
+                app.router.add_post(settings.webhook_path, webhook_handler)
+                
+                # Add health check handler
+                app.router.add_get('/health', health_handler)
+                
+                # Set webhook with Telegram
+                await application.bot.set_webhook(
+                    url=webhook_full_url,
+                    allowed_updates=Update.ALL_TYPES
+                )
+                logger.info(f"✅ Webhook set: {webhook_full_url}")
+                
+                # Start server
+                runner = aio_web.AppRunner(app)
+                await runner.setup()
+                site = aio_web.TCPSite(runner, '0.0.0.0', settings.port)
+                await site.start()
+                logger.info(f"✅ Webhook server started on port {settings.port}")
+                logger.info(f"✅ Health check available at /health")
+                
+                # Initialize application
+                await application.initialize()
+                await application.start()
+                
+                # Keep running
+                try:
+                    while True:
+                        await asyncio.sleep(1)
+                except KeyboardInterrupt:
+                    logger.info("Shutting down...")
+                finally:
+                    await application.stop()
+                    await application.shutdown()
+            
+            # Run the webhook server
+            asyncio.run(start_webhook_server())
+            
         else:
             logger.info("🔄 Starting polling mode for development")
             # Polling mode for development
