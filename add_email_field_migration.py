@@ -22,12 +22,13 @@ def add_email_field():
                     FROM information_schema.columns 
                     WHERE table_name='users' AND column_name='email'
                 """))
+                has_email = len(result.fetchall()) > 0
             else:  # SQLite
                 result = conn.execute(text("PRAGMA table_info(users)"))
                 columns = [row[1] for row in result.fetchall()]
-                result = columns if 'email' in columns else []
+                has_email = 'email' in columns
             
-            if not result.fetchall():
+            if not has_email:
                 logger.info("Добавляем поле email в таблицу users...")
                 conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(255)"))
                 conn.commit()
