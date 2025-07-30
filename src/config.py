@@ -8,8 +8,8 @@ class Settings(BaseSettings):
     """Enhanced application settings with better environment variable support."""
     
     # Telegram Bot (support both old and new env var names)
-    telegram_token: str = Field(..., env="TELEGRAM_BOT_TOKEN", description="Telegram Bot Token")
-    telegram_bot_token: Optional[str] = Field(None, description="Legacy telegram token field")
+    telegram_bot_token: str = Field(..., env="TELEGRAM_BOT_TOKEN", description="Telegram Bot Token")
+    telegram_token: Optional[str] = Field(None, env="TELEGRAM_TOKEN", description="Alternative telegram token field")
     admin_telegram_ids: Optional[str] = Field(None, env="ADMIN_TELEGRAM_IDS", description="Admin telegram IDs")
     
     # Database
@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     @property
     def bot_token(self) -> str:
         """Get bot token with backward compatibility."""
-        return self.telegram_token or self.telegram_bot_token or ""
+        return self.telegram_bot_token or self.telegram_token or ""
     
     @property
     def admin_ids_list(self) -> list[int]:

@@ -182,18 +182,104 @@ class GoogleCalendarService:
         try:
             event = self._service.events().insert(
                 calendarId=calendar_id,
-                body=event_data
+                body=event_data,
+                conferenceDataVersion=1 if 'conferenceData' in event_data else 0
             ).execute()
             
             logger.info(f"✅ Created calendar event: {event.get('id')}")
-            return event.get('id')
+            return event.get('id'), event.get('hangoutLink', '')
             
         except HttpError as e:
             logger.error(f"Failed to create calendar event: {e}")
-            return None
+            return None, None
         except Exception as e:
             logger.error(f"Error creating calendar event: {e}")
-            return None
+            return None, None
+    
+    def create_meeting_with_owners(self, manager_calendar_id: str, manager_name: str, 
+                                 department: str, date: datetime, time_str: str, 
+                                 owner_emails: List[str], manager_email: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
+        """Create a meeting in manager's calendar with owners as participants."""
+        if not self.is_available:
+            logger.warning("Google Calendar not available - cannot create meeting")
+            return None, None
+        
+        try:
+            # Parse time
+            hour, minute = map(int, time_str.split(':'))
+            start_time = date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            end_time = start_time + timedelta(minutes=60)  # 1 hour meeting
+            
+            # Create attendees list
+            attendees = []
+            
+            # Add owners as attendees
+            for email in owner_emails:
+                attendees.append({
+                    'email': email,
+                    'responseStatus': 'needsAction'
+                })
+            
+            # Add manager if email provided
+            if manager_email:
+                attendees.append({
+                    'email': manager_email,
+                    'displayName': manager_name,
+                    'responseStatus': 'accepted'  # Manager accepts by default
+                })
+            
+            # Create event data
+            event_data = {
+                'summary': f'Созвон с {department}',
+                'description': f'Еженедельный созвон с руководителем отдела {department}\nРуководитель: {manager_name}',
+                'start': {
+                    'dateTime': start_time.isoformat(),
+                    'timeZone': 'Europe/Moscow',
+                },
+                'end': {
+                    'dateTime': end_time.isoformat(),
+                    'timeZone': 'Europe/Moscow',
+                },
+                'attendees': attendees,
+                'conferenceData': {
+                    'createRequest': {
+                        'requestId': f"meeting-{int(datetime.now().timestamp())}",
+                        'conferenceSolutionKey': {'type': 'hangoutsMeet'}
+                    }
+                },
+                'reminders': {
+                    'useDefault': False,
+                    'overrides': [
+                        {'method': 'popup', 'minutes': 10},
+                        {'method': 'email', 'minutes': 1440},  # 24 hours
+                    ],
+                },
+                'sendUpdates': 'all'  # Send invitations to all attendees
+            }
+            
+            # Create event in manager's calendar
+            event = self._service.events().insert(
+                calendarId=manager_calendar_id,
+                body=event_data,
+                conferenceDataVersion=1,
+                sendUpdates='all'
+            ).execute()
+            
+            event_id = event.get('id')
+            meet_link = event.get('hangoutLink', '')
+            
+            logger.info(f"✅ Created meeting in {manager_calendar_id}: {event_id}")
+            logger.info(f"✅ Google Meet link: {meet_link}")
+            logger.info(f"✅ Attendees invited: {len(attendees)}")
+            
+            return event_id, meet_link
+            
+        except HttpError as e:
+            logger.error(f"Failed to create meeting: {e}")
+            return None, None
+        except Exception as e:
+            logger.error(f"Error creating meeting: {e}")
+            return None, None
     
     def health_check(self) -> Dict[str, Any]:
         """Perform health check for Google Calendar service."""
