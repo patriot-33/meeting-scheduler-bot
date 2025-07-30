@@ -11,8 +11,43 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command."""
     user_id = update.effective_user.id
     
+    # Сохраняем важные данные перед проверкой пользователя
+    preserved_data = {}
+    if context.user_data:
+        # Сохраняем критически важные данные о состоянии пользователя
+        preserved_data = {
+            key: value for key, value in context.user_data.items() 
+            if key in ['availability_settings', 'owner_slots', 'conversation_state']
+        }
+    
     with get_db() as db:
         user = db.query(User).filter(User.telegram_id == user_id).first()
+        
+        # Проверяем, является ли пользователь владельцем и автоматически создаем/обновляем
+        if user_id in settings.admin_ids_list:
+            if not user:
+                # Создаем владельца
+                from src.database import Department
+                user = User(
+                    telegram_id=user_id,
+                    telegram_username=update.effective_user.username,
+                    first_name=update.effective_user.first_name or "Владелец",
+                    last_name=update.effective_user.last_name or "Бизнеса",
+                    department=Department.FINANCE,
+                    role=UserRole.OWNER
+                )
+                db.add(user)
+                db.commit()
+                logger.info(f"Auto-created owner user {user_id} via /start")
+            elif user.role != UserRole.OWNER:
+                # Обновляем роль
+                user.role = UserRole.OWNER
+                db.commit()
+                logger.info(f"Updated user {user_id} to OWNER role via /start")
+        
+        # Восстанавливаем сохраненные данные
+        if preserved_data:
+            context.user_data.update(preserved_data)
         
         if not user:
             await update.message.reply_text(
@@ -25,22 +60,24 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "⏳ Ваша заявка ожидает одобрения администратором."
             )
         else:
-            welcome_text = f"Привет, {user.first_name}!\n\n"
+            welcome_text = f"Добро пожаловать, {user.first_name}!\n\n"
             
-            if user.role == UserRole.ADMIN:
+            if user.role == UserRole.OWNER:
                 welcome_text += (
-                    "👨‍💼 Администратор:\n"
-                    "/admin - Админ-панель\n"
-                    "/pending - Ожидающие пользователи\n"
-                    "/users - Список пользователей\n"
+                    "👑 Владелец бизнеса:\n"
+                    "/owner - Панель владельца\n"
+                    "/admin - Управление пользователями\n"
                     "/stats - Статистика\n\n"
+                )
+            elif user.role == UserRole.MANAGER:
+                welcome_text += (
+                    "👨‍💼 Руководитель отдела:\n"
+                    "/schedule - Запланировать встречу\n"
+                    "/my_meetings - Мои встречи\n\n"
                 )
             
             welcome_text += (
-                "📋 Основные команды:\n"
-                "/schedule - Посмотреть доступные слоты\n"
-                "/my_meetings - Мои встречи\n"
-                "/vacation - Отметить отпуск\n"
+                "📋 Общие команды:\n"
                 "/profile - Мой профиль\n"
                 "/help - Помощь"
             )

@@ -34,27 +34,46 @@ logging.getLogger('googleapiclient').setLevel(logging.WARNING)
 
 async def error_handler(update: Update, context):
     """Log errors caused by updates."""
-    from sqlalchemy.exc import DataError, IntegrityError, DatabaseError
+    from sqlalchemy.exc import DataError, IntegrityError, DatabaseError, OperationalError
+    from telegram.error import TelegramError, NetworkError, TimedOut
     
     error_type = type(context.error).__name__
+    user_id = update.effective_user.id if update and update.effective_user else "Unknown"
     
     # Handle specific database errors
-    if isinstance(context.error, (DataError, IntegrityError, DatabaseError)):
-        logger.error(f"Database error occurred: {error_type} - {str(context.error)}")
+    if isinstance(context.error, (DataError, IntegrityError)):
+        logger.error(f"Database integrity error for user {user_id}: {error_type} - {str(context.error)}")
         user_message = "⚠️ Ошибка обработки данных. Проверьте корректность введенной информации."
+    elif isinstance(context.error, (DatabaseError, OperationalError)):
+        logger.error(f"Database connection error for user {user_id}: {error_type} - {str(context.error)}")
+        user_message = "⚠️ Временная проблема с базой данных. Попробуйте через несколько секунд."
+    elif isinstance(context.error, (NetworkError, TimedOut)):
+        logger.error(f"Network/timeout error for user {user_id}: {error_type}")
+        user_message = "⚠️ Проблема с подключением. Попробуйте еще раз."
+    elif isinstance(context.error, TelegramError):
+        logger.error(f"Telegram API error for user {user_id}: {error_type} - {str(context.error)}")
+        user_message = "⚠️ Ошибка Telegram API. Попробуйте позже."
+    elif "callback_data" in str(context.error).lower():
+        logger.error(f"Callback data error for user {user_id}: {error_type}")
+        user_message = "⚠️ Устаревшая кнопка. Используйте /owner для обновления меню."
     else:
         # Don't log sensitive update data in production
         if settings.debug:
             logger.error(f"Update {update} caused error {context.error}")
         else:
-            logger.error(f"Error occurred: {error_type}")
+            logger.error(f"Generic error for user {user_id}: {error_type}")
         user_message = "⚠️ Произошла техническая ошибка. Попробуйте позже."
     
     if update and update.effective_message:
         try:
             await update.effective_message.reply_text(user_message)
         except Exception as e:
-            logger.error(f"Failed to send error message: {e}")
+            logger.error(f"Failed to send error message to user {user_id}: {e}")
+    elif update and update.callback_query:
+        try:
+            await update.callback_query.answer(user_message, show_alert=True)
+        except Exception as e:
+            logger.error(f"Failed to answer callback query for user {user_id}: {e}")
 
 def main():
     """Start the bot."""

@@ -45,18 +45,37 @@ def require_owner(func):
             )
             return
         
-        # Проверяем, что пользователь зарегистрирован как владелец
+        # Проверяем/создаем пользователя-владельца если его нет в БД
         with get_db() as db:
-            user = db.query(User).filter(
-                User.telegram_id == user_id,
-                User.role == UserRole.OWNER
-            ).first()
+            user = db.query(User).filter(User.telegram_id == user_id).first()
             
             if not user:
-                await update.effective_message.reply_text(
-                    "❌ Вы не зарегистрированы как владелец в системе."
-                )
-                return
+                # Автоматически создаем владельца если его нет в БД
+                logger.info(f"Creating owner user for ID {user_id}")
+                try:
+                    from src.database import Department
+                    owner_user = User(
+                        telegram_id=user_id,
+                        telegram_username=update.effective_user.username,
+                        first_name=update.effective_user.first_name or "Владелец",
+                        last_name=update.effective_user.last_name or "Бизнеса",
+                        department=Department.FINANCE,
+                        role=UserRole.OWNER
+                    )
+                    db.add(owner_user)
+                    db.commit()
+                    logger.info(f"Successfully created owner user for ID {user_id}")
+                except Exception as e:
+                    logger.error(f"Failed to create owner user: {e}")
+                    await update.effective_message.reply_text(
+                        "❌ Ошибка инициализации владельца. Попробуйте команду /start."
+                    )
+                    return
+            elif user.role != UserRole.OWNER:
+                # Обновляем роль до владельца, если пользователь в админском списке
+                logger.info(f"Updating user {user_id} role to OWNER")
+                user.role = UserRole.OWNER
+                db.commit()
         
         return await func(update, context, *args, **kwargs)
     return wrapper

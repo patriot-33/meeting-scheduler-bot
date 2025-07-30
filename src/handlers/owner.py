@@ -14,8 +14,13 @@ from src.config import settings
 logger = logging.getLogger(__name__)
 
 # States для conversation handlers
-(ADD_SLOT_DAY, ADD_SLOT_TIME, REMOVE_SLOT_DAY, REMOVE_SLOT_TIME, 
- SETUP_DAY, SETUP_SLOTS, BLOCK_TIME_START, BLOCK_TIME_END, BLOCK_TIME_REASON) = range(9)
+(SET_AVAILABILITY_START, SET_AVAILABILITY_END, BLOCK_TIME_START, BLOCK_TIME_END, BLOCK_TIME_REASON) = range(5)
+
+# Импортируем состояния из owner_slots
+from src.handlers.owner_slots import (
+    ADD_SLOT_DAY, ADD_SLOT_TIME, REMOVE_SLOT_DAY, REMOVE_SLOT_TIME, 
+    SETUP_DAY, SETUP_SLOTS
+)
 
 @require_owner
 async def owner_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -427,29 +432,46 @@ async def reject_manager(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_owner_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик callback для владельцев"""
     query = update.callback_query
-    await query.answer()
     
-    if query.data == "owner_menu":
-        await owner_menu(update, context)
-    elif query.data == "owner_availability":
-        await show_availability_menu(update, context)
-    elif query.data == "owner_add_day":
-        return await start_set_availability(update, context)
-    elif query.data == "owner_remove_day":
-        await show_remove_day_menu(update, context)
-    elif query.data.startswith("remove_day_"):
-        await remove_availability_day(update, context)
-    elif query.data == "owner_managers":
-        await show_managers_menu(update, context)
-    elif query.data == "owner_pending":
-        await show_pending_managers(update, context)
-    elif query.data == "owner_approved":
-        await show_approved_managers(update, context)
-    elif query.data.startswith("owner_approve_"):
-        await approve_manager(update, context)
-    elif query.data.startswith("owner_reject_"):
-        await reject_manager(update, context)
-    # Добавим обработку других callback'ов позже
+    try:
+        await query.answer()
+        
+        if query.data == "owner_menu":
+            await owner_menu(update, context)
+        elif query.data == "owner_availability":
+            await show_availability_menu(update, context)
+        elif query.data == "owner_add_slot":
+            return await start_add_slot(update, context)
+        elif query.data == "owner_remove_slot":
+            return await start_remove_slot(update, context)
+        elif query.data == "owner_setup_day":
+            return await start_setup_day(update, context)
+        elif query.data == "owner_remove_day":
+            await show_remove_day_menu(update, context)
+        elif query.data.startswith("remove_day_"):
+            await remove_availability_day(update, context)
+        elif query.data == "owner_managers":
+            await show_managers_menu(update, context)
+        elif query.data == "owner_pending":
+            await show_pending_managers(update, context)
+        elif query.data == "owner_approved":
+            await show_approved_managers(update, context)
+        elif query.data.startswith("owner_approve_"):
+            await approve_manager(update, context)
+        elif query.data.startswith("owner_reject_"):
+            await reject_manager(update, context)
+        else:
+            logger.warning(f"Unhandled owner callback: {query.data}")
+            await query.edit_message_text(
+                "❌ Неизвестная команда. Используйте /owner для обновления меню.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Главное меню", callback_data="owner_menu")]])
+            )
+    except Exception as e:
+        logger.error(f"Error in owner callback handler: {e}")
+        try:
+            await query.answer("❌ Произошла ошибка. Попробуйте еще раз.")
+        except:
+            pass  # Игнорируем ошибки при отправке ответа
 
 def get_owner_conversation_handler():
     """Получить conversation handler для владельцев"""
@@ -484,6 +506,19 @@ def get_owner_conversation_handler():
                 CallbackQueryHandler(save_day_setup, pattern="^save_day_setup$")
             ]
         },
-        fallbacks=[CallbackQueryHandler(show_availability_menu, pattern="^owner_availability$")],
+        fallbacks=[
+            CallbackQueryHandler(show_availability_menu, pattern="^owner_availability$"),
+            CallbackQueryHandler(owner_menu, pattern="^owner_menu$"),
+            CommandHandler('owner', owner_menu),
+            CommandHandler('cancel', cancel_conversation)
+        ],
         per_message=True
     )
+
+async def cancel_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отменить текущий conversation"""
+    await update.message.reply_text(
+        "❌ Операция отменена. Используйте /owner для доступа к панели владельца."
+    )
+    context.user_data.clear()
+    return ConversationHandler.END
