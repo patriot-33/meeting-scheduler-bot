@@ -103,6 +103,19 @@ def main():
         
         init_db()
         logger.info("✅ Database initialized")
+        
+        # Auto-restore data if needed (production deployment)
+        if settings.database_url.startswith('postgresql'):
+            logger.info("🔄 Checking if data restore is needed...")
+            try:
+                import sys
+                import os
+                sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+                from auto_restore import auto_restore
+                auto_restore()
+            except Exception as restore_error:
+                logger.warning(f"⚠️ Auto restore failed: {restore_error}")
+                
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
         return
