@@ -12,6 +12,55 @@ from utils.decorators import require_registration
 
 logger = logging.getLogger(__name__)
 
+async def notify_owners_about_meeting(context: ContextTypes.DEFAULT_TYPE, meeting, manager: User):
+    """Send telegram notification to all owners about new meeting."""
+    try:
+        from services.owner_service import OwnerService
+        
+        owners = OwnerService.get_all_owners()
+        if not owners:
+            logger.warning("No owners found to notify")
+            return
+        
+        # Format meeting details
+        formatted_date = meeting.scheduled_time.strftime('%d.%m.%Y')
+        formatted_time = meeting.scheduled_time.strftime('%H:%M')
+        day_name = meeting.scheduled_time.strftime('%A')
+        
+        # Russian day names
+        russian_days = {
+            'Monday': 'Понедельник', 'Tuesday': 'Вторник', 'Wednesday': 'Среда',
+            'Thursday': 'Четверг', 'Friday': 'Пятница', 'Saturday': 'Суббота', 'Sunday': 'Воскресенье'
+        }
+        russian_day = russian_days.get(day_name, day_name)
+        
+        message = f"""🔔 НОВАЯ ВСТРЕЧА ЗАПЛАНИРОВАНА!
+
+📅 {russian_day}, {formatted_date}
+🕐 {formatted_time}
+👤 {manager.first_name} {manager.last_name}
+🏢 {manager.department.value}
+
+ID встречи: {meeting.id}"""
+        
+        if meeting.google_meet_link:
+            message += f"\n🔗 Google Meet: {meeting.google_meet_link}"
+        
+        # Send notification to all owners
+        for owner in owners:
+            try:
+                await context.bot.send_message(
+                    chat_id=owner.telegram_id,
+                    text=message,
+                    parse_mode='HTML'
+                )
+                logger.info(f"✅ Notification sent to owner {owner.telegram_id}")
+            except Exception as e:
+                logger.error(f"Failed to send notification to owner {owner.telegram_id}: {e}")
+                
+    except Exception as e:
+        logger.error(f"Failed to notify owners: {e}")
+
 # Русские названия дней недели
 RUSSIAN_WEEKDAYS = {
     'Monday': 'Понедельник',
@@ -279,6 +328,8 @@ async def book_meeting_slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
             meeting = meeting_service.create_meeting(user.id, meeting_datetime)
             
             if meeting:
+                # CRITICAL FIX: Send telegram notifications to owners
+                await notify_owners_about_meeting(context, meeting, user)
                 # Format success message
                 english_day = meeting_datetime.strftime('%A')
                 russian_day = RUSSIAN_WEEKDAYS.get(english_day, english_day)

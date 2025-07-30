@@ -34,12 +34,14 @@ class MeetingService:
                 # Get owner emails for meeting participants
                 owners = OwnerService.get_all_owners()
                 owner_emails = []
+                manager_email = manager.email if manager.email else None
                 
-                # For now, we'll use a placeholder email for owners
-                # In a real implementation, you'd store owner emails in the database
+                # CRITICAL FIX: Use real emails from database
                 for owner in owners:
-                    # You might want to add an email field to the User model
-                    owner_emails.append(f"owner{owner.id}@company.com")  # Placeholder
+                    if owner.email:
+                        owner_emails.append(owner.email)
+                    else:
+                        logger.warning(f"Owner {owner.id} ({owner.first_name} {owner.last_name}) has no email configured")
                 
                 time_str = scheduled_time.strftime('%H:%M')
                 
@@ -53,7 +55,7 @@ class MeetingService:
                         scheduled_time,
                         time_str,
                         owner_emails,
-                        manager_email=None  # Add manager email if available
+                        manager_email=manager_email
                     )
                 else:
                     # Fallback to basic event creation
@@ -89,6 +91,9 @@ class MeetingService:
             self.db.add(meeting)
             self.db.commit()
             self.db.refresh(meeting)
+            
+            # CRITICAL FIX: Notify all owners about the new meeting
+            self._notify_owners_about_meeting(meeting, manager)
             
             return meeting
             
@@ -151,11 +156,11 @@ class MeetingService:
     
     def is_slot_available(self, slot_datetime: datetime) -> bool:
         """Check if a specific slot is available for booking."""
-        # Check if owners are available
+        # Check if owners are available in local database
         if not OwnerService.are_both_owners_available(slot_datetime):
             return False
         
-        # Check if slot is not already booked
+        # Check if slot is not already booked in local database
         existing_meeting = self.db.query(Meeting).filter(
             and_(
                 Meeting.scheduled_time == slot_datetime,
@@ -163,7 +168,98 @@ class MeetingService:
             )
         ).first()
         
-        return existing_meeting is None
+        if existing_meeting:
+            return False
+        
+        # CRITICAL FIX: Check Google Calendar availability
+        if self.calendar_service.is_available:
+            from config import settings
+            if hasattr(settings, 'google_calendar_id_1') and settings.google_calendar_id_1:
+                # Check if the slot is busy in Google Calendar
+                if not self._is_google_calendar_slot_free(settings.google_calendar_id_1, slot_datetime):
+                    return False
+        
+        return True
+    
+    def _is_google_calendar_slot_free(self, calendar_id: str, slot_datetime: datetime, duration_minutes: int = 60) -> bool:
+        """Check if a specific time slot is free in Google Calendar."""
+        try:
+            # Create time range for the slot
+            slot_start = slot_datetime
+            slot_end = slot_datetime + timedelta(minutes=duration_minutes)
+            
+            # Query freebusy API
+            time_min = slot_start.isoformat() + 'Z'
+            time_max = slot_end.isoformat() + 'Z'
+            
+            freebusy_query = {
+                'timeMin': time_min,
+                'timeMax': time_max,
+                'items': [{'id': calendar_id}]
+            }
+            
+            freebusy_result = self.calendar_service._service.freebusy().query(body=freebusy_query).execute()
+            busy_times = freebusy_result['calendars'][calendar_id].get('busy', [])
+            
+            # If there are any busy times in this slot, it's not available
+            if busy_times:
+                logger.info(f"❌ Slot {slot_datetime} is busy in Google Calendar: {busy_times}")
+                return False
+            
+            logger.info(f"✅ Slot {slot_datetime} is free in Google Calendar")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error checking Google Calendar availability: {e}")
+            # In case of error, be conservative and assume slot is busy
+            return False
+    
+    def _notify_owners_about_meeting(self, meeting: Meeting, manager: User):
+        """Notify all owners about new meeting booking."""
+        try:
+            from services.owner_service import OwnerService
+            import asyncio
+            from telegram.ext import Application
+            from config import settings
+            
+            owners = OwnerService.get_all_owners()
+            if not owners:
+                logger.warning("No owners found to notify")
+                return
+            
+            # Format meeting details
+            formatted_date = meeting.scheduled_time.strftime('%d.%m.%Y')
+            formatted_time = meeting.scheduled_time.strftime('%H:%M')
+            day_name = meeting.scheduled_time.strftime('%A')
+            
+            # Russian day names
+            russian_days = {
+                'Monday': 'Понедельник', 'Tuesday': 'Вторник', 'Wednesday': 'Среда',
+                'Thursday': 'Четверг', 'Friday': 'Пятница', 'Saturday': 'Суббота', 'Sunday': 'Воскресенье'
+            }
+            russian_day = russian_days.get(day_name, day_name)
+            
+            message = f"""🔔 НОВАЯ ВСТРЕЧА ЗАПЛАНИРОВАНА!
+
+📅 {russian_day}, {formatted_date}
+🕐 {formatted_time}
+👤 {manager.first_name} {manager.last_name}
+🏢 {manager.department.value}
+
+ID встречи: {meeting.id}"""
+            
+            if meeting.google_meet_link:
+                message += f"\n🔗 Google Meet: {meeting.google_meet_link}"
+            
+            # Get bot application - this will be called from async context
+            # For now, just log the notification (telegram sending requires async context)
+            logger.info(f"📧 OWNER NOTIFICATION: {message}")
+            
+            # TODO: Implement actual telegram notification when called from proper async context
+            # This would require refactoring to make the entire meeting creation async
+            
+        except Exception as e:
+            logger.error(f"Failed to notify owners: {e}")
     
     def get_overdue_users(self, days_overdue: int = 17) -> List[User]:
         """Get users who haven't scheduled meetings in specified days."""

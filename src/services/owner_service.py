@@ -279,6 +279,10 @@ class OwnerService:
         """Получить доступные слоты, когда свободны владельцы (поддерживает 1+ владельца)"""
         available_slots = {}
         
+        # CRITICAL FIX: Import Google Calendar service for integration
+        from services.google_calendar import google_calendar_service
+        from config import settings
+        
         # Генерируем слоты на указанное количество дней вперед
         for day_offset in range(1, days_ahead + 1):
             check_date = datetime.now() + timedelta(days=day_offset)
@@ -297,7 +301,39 @@ class OwnerService:
                     datetime.strptime(time_slot, "%H:%M").time()
                 )
                 
-                if OwnerService.are_both_owners_available(slot_datetime):
+                # Check local owner availability first
+                if not OwnerService.are_both_owners_available(slot_datetime):
+                    continue
+                
+                # CRITICAL FIX: Also check Google Calendar availability
+                is_google_calendar_free = True
+                if google_calendar_service.is_available and hasattr(settings, 'google_calendar_id_1') and settings.google_calendar_id_1:
+                    try:
+                        # Check Google Calendar busy times
+                        slot_end = slot_datetime + timedelta(hours=1)
+                        time_min = slot_datetime.isoformat() + 'Z'
+                        time_max = slot_end.isoformat() + 'Z'
+                        
+                        freebusy_query = {
+                            'timeMin': time_min,
+                            'timeMax': time_max,
+                            'items': [{'id': settings.google_calendar_id_1}]
+                        }
+                        
+                        freebusy_result = google_calendar_service._service.freebusy().query(body=freebusy_query).execute()
+                        busy_times = freebusy_result['calendars'][settings.google_calendar_id_1].get('busy', [])
+                        
+                        if busy_times:
+                            is_google_calendar_free = False
+                            logger.debug(f"Slot {time_slot} on {date_str} is busy in Google Calendar")
+                            
+                    except Exception as e:
+                        logger.error(f"Error checking Google Calendar for slot {time_slot}: {e}")
+                        # Be conservative - if we can't check, assume it's busy
+                        is_google_calendar_free = False
+                
+                # Only add slot if both local and Google Calendar checks pass
+                if is_google_calendar_free:
                     day_slots.append(time_slot)
             
             if day_slots:
