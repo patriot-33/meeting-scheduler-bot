@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     
     # Application Settings
     webhook_url: Optional[str] = Field(None, env="WEBHOOK_URL", description="Webhook URL for production")
+    webhook_path: str = Field(default="/webhook", env="WEBHOOK_PATH", description="Webhook path")
     port: int = Field(default=8443, env="PORT", description="Application port")
     host: str = Field(default="0.0.0.0", env="HOST", description="Application host")
     
@@ -60,6 +61,9 @@ class Settings(BaseSettings):
     # Development vs Production
     environment: str = Field(default="development", env="ENVIRONMENT", description="Environment: development/production")
     debug: bool = Field(default=False, env="DEBUG", description="Debug mode")
+    
+    # Database specific
+    force_enum_hotfix: bool = Field(default=True, env="FORCE_ENUM_HOTFIX", description="Force enum hotfix for PostgreSQL compatibility")
     
     class Config:
         env_file = ".env"

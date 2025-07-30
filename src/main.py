@@ -121,7 +121,7 @@ def main():
         return
     
     # Create application
-    application = Application.builder().token(settings.telegram_bot_token).build()
+    application = Application.builder().token(settings.bot_token).build()
     
     # Add handlers
     # ConversationHandlers first (highest priority)
