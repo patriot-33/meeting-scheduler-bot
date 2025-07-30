@@ -9,7 +9,8 @@ from telegram.ext import (
     ConversationHandler,
     filters,
 )
-from aiohttp import web, Request
+from aiohttp import web
+from aiohttp.web import Request
 
 from config import settings
 from database import init_db
@@ -196,10 +197,8 @@ def main():
             logger.info(f"🔗 Webhook URL: {webhook_full_url}")
             
             # Create webhook with health endpoint
-            import aiohttp.web
-            
             async def create_app():
-                app = aiohttp.web.Application()
+                app = web.Application()
                 app.router.add_get('/health', health_handler)
                 return app
             
