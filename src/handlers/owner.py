@@ -408,16 +408,30 @@ async def handle_owner_callback(update: Update, context: ContextTypes.DEFAULT_TY
             await reject_manager(update, context)
         else:
             logger.warning(f"Unhandled owner callback: {query.data}")
-            await query.edit_message_text(
-                "❌ Неизвестная команда. Используйте /owner для обновления меню.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Главное меню", callback_data="owner_menu")]])
-            )
+            # Очищаем user_data на всякий случай
+            context.user_data.clear()
+            await query.answer("⚠️ Устаревшая кнопка", show_alert=True)
+            try:
+                await query.edit_message_text(
+                    "🔄 Меню обновлено. Используйте /owner для доступа к панели.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("👑 Панель владельца", callback_data="owner_menu")]])
+                )
+            except:
+                # Если не можем редактировать, отправляем новое
+                await update.effective_chat.send_message(
+                    "🔄 Используйте /owner для доступа к панели владельца."
+                )
     except Exception as e:
         logger.error(f"Error in owner callback handler: {e}")
+        # Очищаем user_data при любой ошибке
+        context.user_data.clear()
         try:
-            await query.answer("❌ Произошла ошибка. Попробуйте еще раз.")
+            await query.answer("⚠️ Произошла ошибка. Меню обновлено.", show_alert=True)
+            await update.effective_chat.send_message(
+                "❌ Произошла ошибка. Используйте /owner для продолжения."
+            )
         except:
-            pass  # Игнорируем ошибки при отправке ответа
+            pass  # Ничего не можем сделать
 
 def get_owner_conversation_handler():
     """Получить conversation handler для владельцев"""
@@ -455,13 +469,15 @@ def get_owner_conversation_handler():
         fallbacks=[
             CallbackQueryHandler(show_availability_menu, pattern="^owner_availability$"),
             CallbackQueryHandler(owner_menu, pattern="^owner_menu$"),
-            CommandHandler('owner', owner_menu),
+            CallbackQueryHandler(handle_stale_conversation, pattern=".*"),  # Ловит все остальные callback'и
+            CommandHandler('owner', cancel_and_redirect_owner),
             CommandHandler('cancel', cancel_conversation),
-            CommandHandler('admin', lambda update, context: ConversationHandler.END),
-            CommandHandler('start', lambda update, context: ConversationHandler.END),
-            CommandHandler('help', lambda update, context: ConversationHandler.END),
-            CommandHandler('schedule', lambda update, context: ConversationHandler.END),
-            CommandHandler('my_meetings', lambda update, context: ConversationHandler.END)
+            CommandHandler('admin', cancel_and_redirect_admin),
+            CommandHandler('start', cancel_and_redirect_start),
+            CommandHandler('help', cancel_and_redirect_help),
+            CommandHandler('schedule', cancel_and_redirect_schedule),
+            CommandHandler('my_meetings', cancel_and_redirect_meetings),
+            MessageHandler(filters.ALL, handle_stale_conversation)  # Ловит все сообщения
         ],
         per_message=False
     )
@@ -472,4 +488,71 @@ async def cancel_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE
         "❌ Операция отменена. Используйте /owner для доступа к панели владельца."
     )
     context.user_data.clear()
+    return ConversationHandler.END
+
+# Функции для правильного перенаправления из ConversationHandler
+async def cancel_and_redirect_owner(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отменить conversation и перейти в /owner"""
+    context.user_data.clear()
+    await owner_menu(update, context)
+    return ConversationHandler.END
+
+async def cancel_and_redirect_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отменить conversation и перейти в /admin"""
+    context.user_data.clear()
+    from src.handlers.admin import admin_menu
+    await admin_menu(update, context)
+    return ConversationHandler.END
+
+async def cancel_and_redirect_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отменить conversation и перейти в /start"""
+    context.user_data.clear()
+    from src.handlers.common import start_command
+    await start_command(update, context)
+    return ConversationHandler.END
+
+async def cancel_and_redirect_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отменить conversation и перейти в /help"""
+    context.user_data.clear()
+    from src.handlers.common import help_command
+    await help_command(update, context)
+    return ConversationHandler.END
+
+async def cancel_and_redirect_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отменить conversation и перейти в /schedule"""
+    context.user_data.clear()
+    from src.handlers.manager import show_available_slots
+    await show_available_slots(update, context)
+    return ConversationHandler.END
+
+async def cancel_and_redirect_meetings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отменить conversation и перейти в /my_meetings"""
+    context.user_data.clear()
+    from src.handlers.manager import show_my_meetings
+    await show_my_meetings(update, context)
+    return ConversationHandler.END
+
+async def handle_stale_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка 'застрявших' состояний ConversationHandler"""
+    context.user_data.clear()
+    
+    if update.callback_query:
+        await update.callback_query.answer(
+            "⚠️ Устаревшее меню. Обновляю...",
+            show_alert=True
+        )
+        try:
+            await update.callback_query.edit_message_text(
+                "🔄 Меню обновлено. Используйте /owner для доступа к панели."
+            )
+        except:
+            # Если не можем редактировать, отправляем новое сообщение
+            await update.effective_chat.send_message(
+                "🔄 Меню обновлено. Используйте /owner для доступа к панели."
+            )
+    else:
+        await update.message.reply_text(
+            "⚠️ Настройка слотов прервана. Используйте /owner для продолжения."
+        )
+    
     return ConversationHandler.END
