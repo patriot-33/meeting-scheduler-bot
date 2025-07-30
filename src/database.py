@@ -49,7 +49,8 @@ class User(Base):
     first_name = Column(String(255), nullable=False)
     last_name = Column(String(255), nullable=False)
     email = Column(String(255))  # Email для Google Calendar
-    google_calendar_id = Column(String(255))  # Персональный ID календаря для владельцев
+    google_calendar_id = Column(String(255))  # Персональный ID календаря
+    oauth_credentials = Column(Text)  # OAuth токены для руководителей
     department = Column(Enum(Department, name='department', values_callable=lambda x: [e.value for e in x]), nullable=False)
     role = Column(Enum(UserRole, name='userrole', values_callable=lambda x: [e.value for e in x]), default=UserRole.PENDING)
     status = Column(Enum(UserStatus, name='userstatus', values_callable=lambda x: [e.value for e in x]), default=UserStatus.ACTIVE)
@@ -178,6 +179,16 @@ def _ensure_missing_fields_exist():
             logger.info("✅ Поле google_calendar_id успешно добавлено")
         else:
             logger.info("✅ Поле google_calendar_id уже существует")
+        
+        # Проверяем oauth_credentials - NEW OAUTH FIELD
+        if 'oauth_credentials' not in column_names:
+            logger.info("Добавляем поле oauth_credentials в таблицу users...")
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN oauth_credentials TEXT"))
+                conn.commit()
+            logger.info("✅ Поле oauth_credentials успешно добавлено")
+        else:
+            logger.info("✅ Поле oauth_credentials уже существует")
             
     except Exception as e:
         logger.warning(f"⚠️ Не удалось проверить/добавить поля: {e}")

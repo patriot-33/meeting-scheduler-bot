@@ -222,6 +222,10 @@ def main():
                 # Add health check handler
                 app.router.add_get('/health', health_handler)
                 
+                # Add OAuth callback handler
+                from utils.oauth_handlers import oauth_callback_handler
+                app.router.add_get('/oauth/callback', lambda req: oauth_callback_handler(req, application))
+                
                 # Set webhook with Telegram
                 await application.bot.set_webhook(
                     url=webhook_full_url,
