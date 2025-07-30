@@ -1,0 +1,208 @@
+"""
+Simple calendar integration for managers using Calendar ID sharing.
+No OAuth required - managers just share their calendar with service account.
+"""
+import logging
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+
+from database import get_db, User, UserRole
+from utils.decorators import require_registration
+from services.google_calendar import calendar_service
+from config import settings
+
+logger = logging.getLogger(__name__)
+
+@require_registration
+async def simple_calendar_connect(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Простое подключение календаря через Calendar ID.
+    Руководитель дает доступ сервисному аккаунту к своему календарю.
+    """
+    user_id = update.effective_user.id
+    
+    with get_db() as db:
+        user = db.query(User).filter(User.telegram_id == user_id).first()
+        
+        if user.role != UserRole.MANAGER:
+            await update.message.reply_text(
+                "❌ Данная функция доступна только руководителям отделов."
+            )
+            return
+        
+        # Get service account email
+        service_account_email = calendar_service.get_service_account_email()
+        
+        if not service_account_email:
+            await update.message.reply_text(
+                "❌ Сервисный аккаунт не настроен. Обратитесь к администратору."
+            )
+            return
+    
+    instructions = f"""
+🗓️ **Простое подключение Google Calendar**
+
+Вам не нужен OAuth! Просто поделитесь календарем:
+
+1️⃣ **Откройте Google Calendar**
+   • Перейдите на https://calendar.google.com
+   • Найдите ваш рабочий календарь
+
+2️⃣ **Поделитесь календарем с ботом**
+   • Нажмите на 3 точки рядом с календарем
+   • Выберите "Настройки и общий доступ"
+   • В разделе "Предоставить доступ" добавьте:
+   
+   📧 `{service_account_email}`
+   
+   • Установите разрешение: **"Вносить изменения"**
+   • Нажмите "Отправить"
+
+3️⃣ **Скопируйте ID календаря**
+   • В настройках календаря найдите "ID календаря"
+   • Выглядит как: `your.email@gmail.com` или `abc123...@group.calendar.google.com`
+
+4️⃣ **Отправьте ID боту**
+   Используйте команду:
+   `/setcalendar ВАШ_CALENDAR_ID`
+
+✅ **Преимущества:**
+• Не требует OAuth авторизации
+• Вы контролируете доступ через Google Calendar
+• Можете отозвать доступ в любой момент
+• Работает с корпоративными календарями
+
+🔒 **Безопасность:**
+• Бот получит доступ только к указанному календарю
+• Никаких паролей или токенов не требуется
+• Вы можете ограничить доступ только на чтение
+"""
+    
+    keyboard = [
+        [InlineKeyboardButton("📋 Копировать email бота", callback_data=f"copy_service_email:{service_account_email}")],
+        [InlineKeyboardButton("📺 Видео-инструкция", url="https://support.google.com/calendar/answer/37082")],
+        [InlineKeyboardButton("❓ Частые вопросы", callback_data="simple_calendar_faq")],
+        [InlineKeyboardButton("← Назад", callback_data="nav_main_menu")]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        instructions, 
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
+@require_registration  
+async def set_calendar_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Установить Calendar ID для руководителя."""
+    if not context.args:
+        await update.message.reply_text(
+            "❌ Укажите Calendar ID после команды.\n"
+            "Пример: `/setcalendar your.email@gmail.com`",
+            parse_mode='Markdown'
+        )
+        return
+    
+    calendar_id = context.args[0]
+    user_id = update.effective_user.id
+    
+    # Validate calendar ID format
+    if '@' not in calendar_id:
+        await update.message.reply_text(
+            "❌ Неверный формат Calendar ID.\n"
+            "Должен содержать @, например: `your.email@gmail.com`",
+            parse_mode='Markdown'
+        )
+        return
+    
+    with get_db() as db:
+        user = db.query(User).filter(User.telegram_id == user_id).first()
+        
+        if not user or user.role != UserRole.MANAGER:
+            await update.message.reply_text("❌ Функция доступна только руководителям.")
+            return
+        
+        # Test calendar access
+        try:
+            test_result = await calendar_service.test_calendar_access(calendar_id)
+            
+            if test_result['success']:
+                # Save calendar ID
+                user.google_calendar_id = calendar_id
+                user.calendar_connected = True
+                db.commit()
+                
+                await update.message.reply_text(
+                    f"✅ **Календарь успешно подключен!**\n\n"
+                    f"📅 Календарь: `{test_result.get('summary', calendar_id)}`\n"
+                    f"🎨 Цвет: {test_result.get('backgroundColor', 'стандартный')}\n"
+                    f"🌍 Часовой пояс: {test_result.get('timeZone', settings.timezone)}\n\n"
+                    f"Теперь вы можете:\n"
+                    f"• Планировать встречи: /schedule\n"
+                    f"• Просматривать встречи: /my_meetings\n"
+                    f"• Проверять календарь: /calendar_status",
+                    parse_mode='Markdown'
+                )
+            else:
+                error_msg = test_result.get('error', 'Неизвестная ошибка')
+                
+                if 'not found' in error_msg.lower():
+                    await update.message.reply_text(
+                        f"❌ **Календарь не найден**\n\n"
+                        f"Убедитесь что:\n"
+                        f"1. Вы поделились календарем с:\n`{calendar_service.get_service_account_email()}`\n"
+                        f"2. Calendar ID указан правильно: `{calendar_id}`\n"
+                        f"3. Разрешения установлены на 'Вносить изменения'",
+                        parse_mode='Markdown'
+                    )
+                else:
+                    await update.message.reply_text(
+                        f"❌ **Ошибка доступа к календарю**\n\n{error_msg}",
+                        parse_mode='Markdown'
+                    )
+                    
+        except Exception as e:
+            logger.error(f"Error testing calendar access: {e}")
+            await update.message.reply_text(
+                "❌ Ошибка при проверке календаря. Попробуйте позже."
+            )
+
+async def simple_calendar_faq(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """FAQ для простого подключения календаря."""
+    faq_text = """
+❓ **Частые вопросы - Простое подключение**
+
+**Q: Где найти Calendar ID?**
+A: Google Calendar → Настройки календаря → раздел "Интеграция"
+
+**Q: Какие разрешения давать боту?**
+A: "Вносить изменения" для создания встреч или "Просматривать" для чтения
+
+**Q: Можно использовать корпоративный календарь?**
+A: Да, если у вас есть права на предоставление доступа
+
+**Q: Как отозвать доступ?**
+A: Google Calendar → Настройки → Удалите email бота из списка доступа
+
+**Q: Бот видит все мои календари?**
+A: Нет, только тот календарь, к которому вы дали доступ
+
+**Q: Можно подключить несколько календарей?**
+A: В текущей версии - только один основной календарь
+
+**Q: Ошибка "Calendar not found"?**
+A: Проверьте что поделились календарем и указали правильный ID
+
+**Q: Нужен ли Google Workspace?**
+A: Нет, работает с обычным Gmail аккаунтом
+"""
+    
+    keyboard = [[InlineKeyboardButton("← Назад", callback_data="simple_calendar")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.callback_query.edit_message_text(
+        faq_text,
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )

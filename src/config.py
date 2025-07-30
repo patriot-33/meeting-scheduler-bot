@@ -43,6 +43,13 @@ class Settings(BaseSettings):
         description="Google OAuth Client JSON as environment variable string (preferred for production)"
     )
     
+    # Public OAuth Client ID (for Device Code or Implicit flow)
+    google_oauth_client_id: Optional[str] = Field(
+        None,
+        env="GOOGLE_OAUTH_CLIENT_ID",
+        description="Public OAuth Client ID for self-service calendar connection"
+    )
+    
     # Timezone and Scheduling
     timezone: str = Field(default="Europe/Moscow", env="TIMEZONE", description="Timezone for scheduling")
     

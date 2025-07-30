@@ -37,6 +37,74 @@ class GoogleCalendarService:
             logger.error(f"❌ Failed to initialize Google Calendar service: {e}")
             self._is_available = False
     
+    def get_service_account_email(self) -> Optional[str]:
+        """Get service account email for calendar sharing."""
+        try:
+            if self._credentials and hasattr(self._credentials, 'service_account_email'):
+                return self._credentials.service_account_email
+            
+            # Try to get from environment variable
+            google_credentials_json = os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON')
+            if google_credentials_json:
+                credentials_info = json.loads(google_credentials_json)
+                return credentials_info.get('client_email')
+            
+            # Try to get from file
+            if settings.google_service_account_file and os.path.exists(settings.google_service_account_file):
+                with open(settings.google_service_account_file, 'r') as f:
+                    credentials_info = json.load(f)
+                    return credentials_info.get('client_email')
+                    
+        except Exception as e:
+            logger.error(f"Error getting service account email: {e}")
+        
+        return None
+    
+    async def test_calendar_access(self, calendar_id: str) -> Dict[str, Any]:
+        """Test if service account has access to a calendar."""
+        try:
+            if not self._is_available:
+                return {'success': False, 'error': 'Google Calendar service not available'}
+            
+            # Try to get calendar metadata
+            calendar = self._service.calendars().get(calendarId=calendar_id).execute()
+            
+            # Try to list a few events to verify read access
+            now = datetime.utcnow().isoformat() + 'Z'
+            events_result = self._service.events().list(
+                calendarId=calendar_id,
+                timeMin=now,
+                maxResults=1,
+                singleEvents=True,
+                orderBy='startTime'
+            ).execute()
+            
+            return {
+                'success': True,
+                'summary': calendar.get('summary', 'Unknown'),
+                'description': calendar.get('description', ''),
+                'timeZone': calendar.get('timeZone', 'UTC'),
+                'backgroundColor': calendar.get('backgroundColor', '#1a73e8'),
+                'accessRole': calendar.get('accessRole', 'unknown'),
+                'canWrite': calendar.get('accessRole') in ['writer', 'owner'],
+                'eventsCount': len(events_result.get('items', []))
+            }
+            
+        except HttpError as e:
+            error_details = json.loads(e.content.decode('utf-8'))
+            error_message = error_details.get('error', {}).get('message', str(e))
+            
+            if e.resp.status == 404:
+                return {'success': False, 'error': f'Calendar not found: {calendar_id}'}
+            elif e.resp.status == 403:
+                return {'success': False, 'error': f'No access to calendar: {error_message}'}
+            else:
+                return {'success': False, 'error': f'API Error: {error_message}'}
+                
+        except Exception as e:
+            logger.error(f"Error testing calendar access: {e}")
+            return {'success': False, 'error': str(e)}
+    
     def _get_credentials(self) -> Optional[service_account.Credentials]:
         """Get credentials from environment variable or file."""
         # Method 1: Try to get credentials from environment variable (JSON string)
