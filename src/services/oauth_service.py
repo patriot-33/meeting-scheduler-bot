@@ -28,29 +28,43 @@ class ManagerOAuthService:
         ]
         self.redirect_uri = f"{settings.webhook_url}/oauth/callback"
         
+    @property
+    def is_oauth_configured(self) -> bool:
+        """Check if OAuth Client is properly configured."""
+        return settings.validate_oauth_client_config()
+        
     def generate_auth_url(self, telegram_id: int) -> str:
         """Generate OAuth authorization URL for manager."""
         try:
-            # Check Google configuration
-            if not settings.google_service_account_json:
-                logger.error("Google service account JSON not configured")
+            # Check OAuth Client configuration (NOT Service Account!)
+            if not settings.validate_oauth_client_config():
+                logger.error("Google OAuth Client not configured. Use GOOGLE_OAUTH_CLIENT_JSON or oauth_client_key.json file")
                 return None
             
             if not settings.webhook_url:
                 logger.error("Webhook URL not configured for OAuth callback")
                 return None
                 
-            # Parse and validate JSON
-            try:
-                google_config = json.loads(settings.google_service_account_json)
-                if 'client_id' not in google_config:
-                    logger.error("Invalid Google service account JSON - missing client_id")
-                    return None
-            except json.JSONDecodeError as e:
-                logger.error(f"Invalid Google service account JSON: {e}")
+            # Get OAuth Client configuration
+            google_config = settings.get_oauth_client_config()
+            if not google_config:
+                logger.error("Failed to load OAuth Client configuration")
+                return None
+                
+            # Validate OAuth Client structure
+            if 'web' in google_config:
+                client_config = google_config['web']
+            elif 'installed' in google_config:
+                client_config = google_config['installed'] 
+            else:
+                logger.error("Invalid OAuth Client JSON - must contain 'web' or 'installed' section")
+                return None
+                
+            if 'client_id' not in client_config or 'client_secret' not in client_config:
+                logger.error("Invalid OAuth Client JSON - missing client_id or client_secret")
                 return None
             
-            # Create OAuth flow
+            # Create OAuth flow with proper client config
             flow = Flow.from_client_config(
                 google_config,
                 scopes=self.scopes
@@ -92,9 +106,13 @@ class ManagerOAuthService:
             if not self._verify_oauth_state(telegram_id, state_token):
                 raise ValueError("Invalid state token")
             
-            # Exchange code for tokens
+            # Exchange code for tokens using OAuth Client config
+            google_config = settings.get_oauth_client_config()
+            if not google_config:
+                raise ValueError("OAuth Client configuration not available")
+                
             flow = Flow.from_client_config(
-                json.loads(settings.google_service_account_json),
+                google_config,
                 scopes=self.scopes
             )
             flow.redirect_uri = self.redirect_uri

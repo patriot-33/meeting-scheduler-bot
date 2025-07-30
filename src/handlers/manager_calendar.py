@@ -72,25 +72,47 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Generate OAuth URL
     try:
         from services.oauth_service import oauth_service
-        oauth_url = oauth_service.generate_auth_url(user_id)
         
-        if oauth_url:
-            keyboard = [
-                [InlineKeyboardButton("🔗 Подключить Google Calendar", url=oauth_url)],
-                [InlineKeyboardButton("❓ Частые вопросы", callback_data="calendar_faq")],
-                [InlineKeyboardButton("← Назад", callback_data="nav_main_menu")]
-            ]
-        else:
-            # OAuth URL generation failed
-            instructions += "\n\n❌ **Ошибка конфигурации**\nОбратитесь к администратору для настройки Google Calendar."
+        # Pre-check OAuth configuration 
+        if not oauth_service.is_oauth_configured:
+            instructions += "\n\n❌ **OAuth Client не настроен**\n"
+            instructions += "Администратор должен добавить:\n"
+            instructions += "• `GOOGLE_OAUTH_CLIENT_JSON` переменную окружения\n"
+            instructions += "• Или файл `oauth_client_key.json`\n\n"
+            instructions += "💡 Используйте Google Cloud Console:\n"
+            instructions += "1. APIs & Services → Credentials\n"
+            instructions += "2. Create OAuth 2.0 Client → Web Application\n"
+            instructions += "3. Add redirect URI: `{}/oauth/callback`".format(settings.webhook_url or "YOUR_WEBHOOK_URL")
+            
             keyboard = [
                 [InlineKeyboardButton("❓ Частые вопросы", callback_data="calendar_faq")],
                 [InlineKeyboardButton("📧 Сообщить email владельцу", callback_data="send_email_to_owner")],
                 [InlineKeyboardButton("← Назад", callback_data="nav_main_menu")]
             ]
+        else:
+            oauth_url = oauth_service.generate_auth_url(user_id)
+            
+            if oauth_url:
+                keyboard = [
+                    [InlineKeyboardButton("🔗 Подключить Google Calendar", url=oauth_url)],
+                    [InlineKeyboardButton("❓ Частые вопросы", callback_data="calendar_faq")],
+                    [InlineKeyboardButton("← Назад", callback_data="nav_main_menu")]
+                ]
+            else:
+                # OAuth URL generation failed
+                instructions += "\n\n❌ **Ошибка генерации OAuth URL**\n"
+                instructions += "Проверьте:\n"
+                instructions += "• Корректность OAuth Client JSON\n"
+                instructions += "• Настройку WEBHOOK_URL\n"
+                instructions += "• Redirect URI в Google Console"
+                keyboard = [
+                    [InlineKeyboardButton("❓ Частые вопросы", callback_data="calendar_faq")],
+                    [InlineKeyboardButton("📧 Сообщить email владельцу", callback_data="send_email_to_owner")],
+                    [InlineKeyboardButton("← Назад", callback_data="nav_main_menu")]
+                ]
     except Exception as e:
-        logger.error(f"Error generating OAuth URL: {e}")
-        instructions += "\n\n❌ **Ошибка системы**\nОбратитесь к администратору."
+        logger.error(f"Error with OAuth service: {e}")
+        instructions += f"\n\n❌ **Критическая ошибка OAuth**\n`{str(e)}`\n\nОбратитесь к администратору."
         keyboard = [
             [InlineKeyboardButton("❓ Частые вопросы", callback_data="calendar_faq")],
             [InlineKeyboardButton("📧 Сообщить email владельцу", callback_data="send_email_to_owner")],

@@ -31,6 +31,18 @@ class Settings(BaseSettings):
         description="Google Service Account JSON as environment variable string (preferred for production)"
     )
     
+    # Google OAuth Client - For manager calendar integration
+    google_oauth_client_file: str = Field(
+        default="oauth_client_key.json",
+        env="GOOGLE_OAUTH_CLIENT_FILE", 
+        description="Path to Google OAuth Client JSON file"
+    )
+    google_oauth_client_json: Optional[str] = Field(
+        None,
+        env="GOOGLE_OAUTH_CLIENT_JSON",
+        description="Google OAuth Client JSON as environment variable string (preferred for production)"
+    )
+    
     # Timezone and Scheduling
     timezone: str = Field(default="Europe/Moscow", env="TIMEZONE", description="Timezone for scheduling")
     
@@ -113,29 +125,72 @@ class Settings(BaseSettings):
         if not self.google_calendar_enabled:
             return True
             
-        # Check if any authentication method is available
-        has_env_json = bool(self.google_service_account_json)
-        has_file = bool(self.google_service_account_file and os.path.exists(self.google_service_account_file))
+        # Check Service Account authentication (for owner calendar)
+        has_service_env_json = bool(self.google_service_account_json)
+        has_service_file = bool(self.google_service_account_file and os.path.exists(self.google_service_account_file))
         
-        # In production, prefer environment variable
-        if self.is_production:
-            return has_env_json or has_file
+        # Check OAuth Client authentication (for manager calendars)
+        has_oauth_env_json = bool(self.google_oauth_client_json)
+        has_oauth_file = bool(self.google_oauth_client_file and os.path.exists(self.google_oauth_client_file))
         
-        # In development, file is acceptable
-        return has_env_json or has_file
+        # Service Account is required for basic functionality
+        service_account_valid = has_service_env_json or has_service_file
+        
+        # OAuth Client is optional but needed for manager integration
+        oauth_client_valid = has_oauth_env_json or has_oauth_file
+        
+        return service_account_valid  # OAuth client validation is separate
     
     def get_google_credentials_info(self) -> dict:
         """Get information about available Google credentials."""
         return {
-            "environment_json_available": bool(self.google_service_account_json),
+            "service_account_environment_json_available": bool(self.google_service_account_json),
             "service_account_file_exists": bool(
                 self.google_service_account_file and 
                 os.path.exists(self.google_service_account_file)
             ),
             "service_account_file_path": self.google_service_account_file,
+            "oauth_client_environment_json_available": bool(self.google_oauth_client_json),
+            "oauth_client_file_exists": bool(
+                self.google_oauth_client_file and 
+                os.path.exists(self.google_oauth_client_file)
+            ),
+            "oauth_client_file_path": self.google_oauth_client_file,
             "google_calendar_enabled": self.google_calendar_enabled,
             "fallback_mode": self.fallback_mode
         }
+        
+    def validate_oauth_client_config(self) -> bool:
+        """Validate OAuth Client configuration for manager integration."""
+        has_oauth_env_json = bool(self.google_oauth_client_json)
+        has_oauth_file = bool(self.google_oauth_client_file and os.path.exists(self.google_oauth_client_file))
+        
+        return has_oauth_env_json or has_oauth_file
+        
+    def get_oauth_client_config(self) -> Optional[dict]:
+        """Get OAuth Client configuration from environment or file."""
+        import json
+        
+        # Try environment variable first (preferred for production)
+        if self.google_oauth_client_json:
+            try:
+                return json.loads(self.google_oauth_client_json)
+            except json.JSONDecodeError as e:
+                logger = __import__('logging').getLogger(__name__)
+                logger.error(f"Invalid OAuth Client JSON in environment: {e}")
+                return None
+        
+        # Try file second (development)
+        if self.google_oauth_client_file and os.path.exists(self.google_oauth_client_file):
+            try:
+                with open(self.google_oauth_client_file, 'r') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, IOError) as e:
+                logger = __import__('logging').getLogger(__name__)
+                logger.error(f"Invalid OAuth Client JSON in file {self.google_oauth_client_file}: {e}")
+                return None
+        
+        return None
     
     @validator('telegram_bot_token')
     def validate_bot_token(cls, v, values):
