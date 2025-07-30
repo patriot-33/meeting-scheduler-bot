@@ -71,6 +71,18 @@ class Settings(BaseSettings):
         description="Enable fallback functionality when external services are unavailable"
     )
     
+    # BULLETPROOF Google Calendar configuration
+    google_calendar_try_attendees: bool = Field(
+        default=False,  # По умолчанию отключено для избежания ошибок
+        env="GOOGLE_CALENDAR_TRY_ATTENDEES",
+        description="Try to create events with attendees (requires Domain-Wide Delegation)"
+    )
+    google_calendar_force_attendee_free: bool = Field(
+        default=True,   # По умолчанию включено для bulletproof режима
+        env="GOOGLE_CALENDAR_FORCE_ATTENDEE_FREE", 
+        description="Force creation of events without attendees (bulletproof mode)"
+    )
+    
     # Logging
     log_level: str = Field(default="INFO", env="LOG_LEVEL", description="Logging level")
     log_format: str = Field(
@@ -305,6 +317,11 @@ def print_configuration_summary():
     creds_info = settings.get_google_credentials_info()
     for key, value in creds_info.items():
         print(f"  {key}: {value}")
+    
+    print("\nGoogle Calendar BULLETPROOF Settings:")
+    print(f"  try_attendees: {settings.google_calendar_try_attendees}")
+    print(f"  force_attendee_free: {settings.google_calendar_force_attendee_free}")
+    print(f"  strategy: {'Attendee-free (BULLETPROOF)' if settings.google_calendar_force_attendee_free else 'Auto-detect'}")
     
     print("\nBusiness Logic:")
     print(f"  Meeting duration: {settings.meeting_duration_minutes} minutes")

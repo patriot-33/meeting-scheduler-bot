@@ -233,8 +233,13 @@ async def back_to_dates(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
-    # Re-show the date selection
-    user = context.user_data.get('user') if context else None
+    # Get user from database instead of context.user_data
+    user = None
+    if update.effective_user:
+        user_id = update.effective_user.id
+        with get_db() as db:
+            user = db.query(User).filter(User.telegram_id == user_id).first()
+    
     await show_available_slots_inline(query, user)
 
 async def show_available_slots_inline(query, user=None):
@@ -297,13 +302,19 @@ async def show_available_slots_inline(query, user=None):
 async def show_my_meetings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show user's scheduled meetings with cancellation options."""
     try:
-        user = context.user_data.get('user')
-        if not user:
-            await update.callback_query.answer("❌ Пользователь не найден")
-            return
-        
-        # Get user's meetings
+        # Get user from database instead of context.user_data
+        user_id = update.effective_user.id
         with get_db() as db:
+            user = db.query(User).filter(User.telegram_id == user_id).first()
+            if not user:
+                error_msg = "❌ Пользователь не найден"
+                if update.callback_query:
+                    await update.callback_query.answer(error_msg)
+                else:
+                    await update.message.reply_text(error_msg)
+                return
+            
+            # Get user's meetings
             meetings = db.query(Meeting).filter(
                 Meeting.manager_id == user.id,
                 Meeting.status == MeetingStatus.SCHEDULED,
@@ -311,12 +322,20 @@ async def show_my_meetings(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ).order_by(Meeting.scheduled_time).all()
         
         if not meetings:
-            await update.callback_query.edit_message_text(
-                "📅 У вас нет запланированных встреч",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("◀️ Назад", callback_data="manager_menu")]
-                ])
-            )
+            no_meetings_msg = "📅 У вас нет запланированных встреч"
+            keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data="manager_menu")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            if update.callback_query:
+                await update.callback_query.edit_message_text(
+                    no_meetings_msg,
+                    reply_markup=reply_markup
+                )
+            else:
+                await update.message.reply_text(
+                    no_meetings_msg,
+                    reply_markup=reply_markup
+                )
             return
         
         # Build meetings list with cancel buttons
@@ -350,23 +369,44 @@ async def show_my_meetings(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ])
         
         keyboard.append([InlineKeyboardButton("◀️ Назад в меню", callback_data="manager_menu")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.callback_query.edit_message_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        # Handle both callback query and regular message
+        if update.callback_query:
+            await update.callback_query.edit_message_text(
+                text,
+                reply_markup=reply_markup
+            )
+        else:
+            await update.message.reply_text(
+                text,
+                reply_markup=reply_markup
+            )
         
     except Exception as e:
         logger.error(f"Error showing meetings: {e}")
-        await update.callback_query.answer("❌ Ошибка при загрузке встреч")
+        # Handle error response for both types
+        error_msg = "❌ Ошибка при загрузке встреч"
+        if update.callback_query:
+            await update.callback_query.answer(error_msg)
+        else:
+            await update.message.reply_text(error_msg)
 
 @require_registration
 async def cancel_meeting_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle meeting cancellation."""
     try:
         query = update.callback_query
+        if not query:
+            await update.message.reply_text("❌ Эта функция доступна только через меню встреч")
+            return
+            
         meeting_id = int(query.data.split('_')[2])
-        user = context.user_data.get('user')
+        
+        # Get user from database instead of context.user_data
+        user_id = update.effective_user.id
+        with get_db() as db:
+            user = db.query(User).filter(User.telegram_id == user_id).first()
         
         if not user:
             await query.answer("❌ Пользователь не найден")
@@ -452,14 +492,38 @@ async def show_manager_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         text = f"👨‍💼 МЕНЮ МЕНЕДЖЕРА\n\n👤 Выберите действие:"
         
-        await update.callback_query.edit_message_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        # Handle both callback query and regular message
+        if update.callback_query:
+            await update.callback_query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        else:
+            await update.message.reply_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
         
     except Exception as e:
         logger.error(f"Error showing manager menu: {e}")
-        await update.callback_query.answer("❌ Ошибка при загрузке меню")
+        # Handle error response for both types
+        error_msg = "❌ Ошибка при загрузке меню"
+        if update.callback_query:
+            await update.callback_query.answer(error_msg)
+        else:
+            await update.message.reply_text(error_msg)
+
+async def show_available_slots_inline_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Wrapper for show_available_slots_inline that handles user fetching."""
+    query = update.callback_query
+    if query:
+        # Get user from database instead of context.user_data
+        user = None
+        if update.effective_user:
+            user_id = update.effective_user.id
+            with get_db() as db:
+                user = db.query(User).filter(User.telegram_id == user_id).first()
+        await show_available_slots_inline(query, user)
 
 async def book_meeting_slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Book a specific meeting slot."""
@@ -583,5 +647,5 @@ def get_manager_handlers():
         CallbackQueryHandler(show_manager_menu, pattern='^manager_menu$'),
         CallbackQueryHandler(cancel_meeting_callback, pattern=r'^cancel_meeting_\d+$'),
         CallbackQueryHandler(lambda u, c: show_available_slots(u, c), pattern='^schedule_meeting$'),
-        CallbackQueryHandler(lambda u, c: show_available_slots_inline(u.callback_query, c.user_data.get('user')), pattern='^schedule_meeting_inline$'),
+        CallbackQueryHandler(lambda u, c: show_available_slots_inline_wrapper(u, c), pattern='^schedule_meeting_inline$'),
     ]

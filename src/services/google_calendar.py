@@ -267,87 +267,175 @@ class GoogleCalendarService:
     def create_meeting_with_owners(self, manager_calendar_id: str, manager_name: str, 
                                  department: str, date: datetime, time_str: str, 
                                  owner_emails: List[str], manager_email: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
-        """Create a meeting in manager's calendar with owners as participants."""
+        """BULLETPROOF: Create meeting with fallback strategies for Service Account limitations."""
         if not self.is_available:
             logger.warning("Google Calendar not available - cannot create meeting")
             return None, None
         
+        # BULLETPROOF: Check configuration to decide strategy
+        if settings.google_calendar_force_attendee_free:
+            logger.info("🔧 BULLETPROOF: Using attendee-free strategy (forced by configuration)")
+            return self._create_without_attendees_strategy(manager_calendar_id, manager_name, department, 
+                                                         date, time_str, owner_emails, manager_email)
+        
         try:
-            # Parse time
-            hour, minute = map(int, time_str.split(':'))
-            start_time = date.replace(hour=hour, minute=minute, second=0, microsecond=0)
-            end_time = start_time + timedelta(minutes=60)  # 1 hour meeting
-            
-            # Create attendees list
-            attendees = []
-            
-            # Add owners as attendees
-            for email in owner_emails:
-                attendees.append({
-                    'email': email,
-                    'responseStatus': 'needsAction'
-                })
-            
-            # Add manager if email provided
-            if manager_email:
-                attendees.append({
-                    'email': manager_email,
-                    'displayName': manager_name,
-                    'responseStatus': 'accepted'  # Manager accepts by default
-                })
-            
-            # Create event data
-            event_data = {
-                'summary': f'Созвон с {department}',
-                'description': f'Еженедельный созвон с руководителем отдела {department}\nРуководитель: {manager_name}',
-                'start': {
-                    'dateTime': start_time.isoformat(),
-                    'timeZone': 'Europe/Moscow',
-                },
-                'end': {
-                    'dateTime': end_time.isoformat(),
-                    'timeZone': 'Europe/Moscow',
-                },
-                'attendees': attendees,
-                'conferenceData': {
-                    'createRequest': {
-                        'requestId': f"meeting-{int(datetime.now().timestamp())}",
-                        'conferenceSolutionKey': {'type': 'hangoutsMeet'}
-                    }
-                },
-                'reminders': {
-                    'useDefault': False,
-                    'overrides': [
-                        {'method': 'popup', 'minutes': 10},
-                        {'method': 'email', 'minutes': 1440},  # 24 hours
-                    ],
-                },
-                'sendUpdates': 'all'  # Send invitations to all attendees
-            }
-            
-            # Create event in manager's calendar
-            event = self._service.events().insert(
-                calendarId=manager_calendar_id,
-                body=event_data,
-                conferenceDataVersion=1,
-                sendUpdates='all'
-            ).execute()
-            
-            event_id = event.get('id')
-            meet_link = event.get('hangoutLink', '')
-            
-            logger.info(f"✅ Created meeting in {manager_calendar_id}: {event_id}")
-            logger.info(f"✅ Google Meet link: {meet_link}")
-            logger.info(f"✅ Attendees invited: {len(attendees)}")
-            
-            return event_id, meet_link
+            # BULLETPROOF STRATEGY 1: Try with attendees only if enabled
+            if settings.google_calendar_try_attendees:
+                logger.info("🔧 BULLETPROOF: Trying attendees strategy first")
+                return self._create_with_attendees_strategy(manager_calendar_id, manager_name, department, 
+                                                          date, time_str, owner_emails, manager_email)
+            else:
+                logger.info("🔧 BULLETPROOF: Attendees strategy disabled, using attendee-free strategy")
+                return self._create_without_attendees_strategy(manager_calendar_id, manager_name, department, 
+                                                             date, time_str, owner_emails, manager_email)
             
         except HttpError as e:
-            logger.error(f"Failed to create meeting: {e}")
-            return None, None
+            # Check if it's the specific Domain-Wide Delegation error
+            if 'forbiddenForServiceAccounts' in str(e) or 'Service accounts cannot invite attendees' in str(e):
+                logger.warning("🔧 BULLETPROOF FALLBACK: Domain-Wide Delegation not configured, using attendee-free strategy")
+                return self._create_without_attendees_strategy(manager_calendar_id, manager_name, department, 
+                                                             date, time_str, owner_emails, manager_email)
+            else:
+                logger.error(f"Failed to create meeting: {e}")
+                return None, None
         except Exception as e:
             logger.error(f"Error creating meeting: {e}")
             return None, None
+
+    def _create_with_attendees_strategy(self, manager_calendar_id: str, manager_name: str, 
+                                      department: str, date: datetime, time_str: str, 
+                                      owner_emails: List[str], manager_email: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
+        """Strategy 1: Create meeting with attendees (requires Domain-Wide Delegation)."""
+        
+        # Parse time
+        hour, minute = map(int, time_str.split(':'))
+        start_time = date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        end_time = start_time + timedelta(minutes=60)  # 1 hour meeting
+        
+        # Create attendees list
+        attendees = []
+        
+        # Add owners as attendees
+        for email in owner_emails:
+            attendees.append({
+                'email': email,
+                'responseStatus': 'needsAction'
+            })
+        
+        # Add manager if email provided
+        if manager_email:
+            attendees.append({
+                'email': manager_email,
+                'displayName': manager_name,
+                'responseStatus': 'accepted'  # Manager accepts by default
+            })
+        
+        # Create event data WITH attendees
+        event_data = {
+            'summary': f'Созвон с {department}',
+            'description': f'Еженедельный созвон с руководителем отдела {department}\nРуководитель: {manager_name}',
+            'start': {
+                'dateTime': start_time.isoformat(),
+                'timeZone': 'Europe/Moscow',
+            },
+            'end': {
+                'dateTime': end_time.isoformat(),
+                'timeZone': 'Europe/Moscow',
+            },
+            'attendees': attendees,  # WILL CAUSE ERROR WITHOUT DOMAIN-WIDE DELEGATION
+            'conferenceData': {
+                'createRequest': {
+                    'requestId': f"meeting-{int(datetime.now().timestamp())}",
+                    'conferenceSolutionKey': {'type': 'hangoutsMeet'}
+                }
+            },
+            'reminders': {
+                'useDefault': False,
+                'overrides': [
+                    {'method': 'popup', 'minutes': 10},
+                    {'method': 'email', 'minutes': 1440},  # 24 hours
+                ],
+            },
+        }
+        
+        # Create event in manager's calendar WITH sendUpdates
+        event = self._service.events().insert(
+            calendarId=manager_calendar_id,
+            body=event_data,
+            conferenceDataVersion=1,
+            sendUpdates='all'  # WILL CAUSE ERROR WITHOUT DOMAIN-WIDE DELEGATION
+        ).execute()
+        
+        event_id = event.get('id')
+        meet_link = event.get('hangoutLink', '')
+        
+        logger.info(f"✅ STRATEGY 1 SUCCESS: Created meeting with attendees in {manager_calendar_id}: {event_id}")
+        logger.info(f"✅ Google Meet link: {meet_link}")
+        logger.info(f"✅ Attendees invited via Google Calendar: {len(attendees)}")
+        
+        return event_id, meet_link
+
+    def _create_without_attendees_strategy(self, manager_calendar_id: str, manager_name: str, 
+                                         department: str, date: datetime, time_str: str, 
+                                         owner_emails: List[str], manager_email: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
+        """BULLETPROOF Strategy 2: Create meeting without attendees, notify via Telegram."""
+        
+        # Parse time
+        hour, minute = map(int, time_str.split(':'))
+        start_time = date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        end_time = start_time + timedelta(minutes=60)  # 1 hour meeting
+        
+        # Build participant list for description
+        participants_text = f"\n\nУчастники встречи:\n• {manager_name} (Руководитель {department})"
+        for email in owner_emails:
+            if email:
+                participants_text += f"\n• {email}"
+        if manager_email and manager_email not in owner_emails:
+            participants_text += f"\n• {manager_email}"
+        
+        # Create event data WITHOUT attendees
+        event_data = {
+            'summary': f'Созвон с {department}',
+            'description': f'Еженедельный созвон с руководителем отдела {department}\nРуководитель: {manager_name}{participants_text}\n\n⚠️ Уведомления отправлены через Telegram Bot',
+            'start': {
+                'dateTime': start_time.isoformat(),
+                'timeZone': 'Europe/Moscow',
+            },
+            'end': {
+                'dateTime': end_time.isoformat(),
+                'timeZone': 'Europe/Moscow',
+            },
+            # NO attendees field - this avoids the Service Account error
+            'conferenceData': {
+                'createRequest': {
+                    'requestId': f"meeting-{int(datetime.now().timestamp())}",
+                    'conferenceSolutionKey': {'type': 'hangoutsMeet'}
+                }
+            },
+            'reminders': {
+                'useDefault': False,
+                'overrides': [
+                    {'method': 'popup', 'minutes': 10},
+                ],
+            },
+        }
+        
+        # Create event in manager's calendar WITHOUT sendUpdates
+        event = self._service.events().insert(
+            calendarId=manager_calendar_id,
+            body=event_data,
+            conferenceDataVersion=1
+            # NO sendUpdates - this avoids the Service Account error
+        ).execute()
+        
+        event_id = event.get('id')
+        meet_link = event.get('hangoutLink', '')
+        
+        logger.info(f"✅ STRATEGY 2 SUCCESS: Created meeting without attendees in {manager_calendar_id}: {event_id}")
+        logger.info(f"✅ Google Meet link: {meet_link}")
+        logger.info(f"📱 Participants will be notified via Telegram Bot instead of Google Calendar")
+        
+        return event_id, meet_link
     
     def cancel_meeting(self, event_id: str) -> bool:
         """Cancel a meeting in Google Calendar by event ID."""
