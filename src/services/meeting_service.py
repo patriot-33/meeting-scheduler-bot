@@ -2,11 +2,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
+import logging
 
 from database import Meeting, User, MeetingStatus, UserStatus, UserRole
 from services.google_calendar import google_calendar_service
 from services.reminder_service import ReminderService
 from services.owner_service import OwnerService
+
+logger = logging.getLogger(__name__)
 
 class MeetingService:
     def __init__(self, db: Session):
