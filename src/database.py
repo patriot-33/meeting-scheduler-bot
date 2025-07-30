@@ -48,9 +48,9 @@ class User(Base):
     telegram_username = Column(String(255))
     first_name = Column(String(255), nullable=False)
     last_name = Column(String(255), nullable=False)
-    department = Column(Enum(Department, name='department'), nullable=False)
-    role = Column(Enum(UserRole, name='userrole'), default=UserRole.PENDING)
-    status = Column(Enum(UserStatus, name='userstatus'), default=UserStatus.ACTIVE)
+    department = Column(Enum(Department, name='department', values_callable=lambda x: [e.value for e in x]), nullable=False)
+    role = Column(Enum(UserRole, name='userrole', values_callable=lambda x: [e.value for e in x]), default=UserRole.PENDING)
+    status = Column(Enum(UserStatus, name='userstatus', values_callable=lambda x: [e.value for e in x]), default=UserStatus.ACTIVE)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
     
@@ -65,7 +65,7 @@ class Meeting(Base):
     scheduled_time = Column(DateTime, nullable=False)
     google_event_id = Column(String(255), unique=True)
     google_meet_link = Column(String(500))
-    status = Column(Enum(MeetingStatus, name='meetingstatus'), default=MeetingStatus.SCHEDULED)
+    status = Column(Enum(MeetingStatus, name='meetingstatus', values_callable=lambda x: [e.value for e in x]), default=MeetingStatus.SCHEDULED)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
     
@@ -162,18 +162,26 @@ def init_db():
         logger.info("Database initialization completed successfully")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
-        # Try to run enum migration if it's an enum-related error
-        if "enum" in str(e).lower() or "invalid input value" in str(e).lower():
-            logger.info("Attempting to fix enum compatibility issues...")
+        # Try to run enum hotfix if it's an enum-related error
+        if "enum" in str(e).lower() or "invalid input value" in str(e).lower() or "does not exist" in str(e).lower():
+            logger.info("Attempting to fix enum compatibility issues with hotfix...")
             try:
-                from fix_enum_migration import fix_enum_migration
-                fix_enum_migration()
-                # Retry initialization
-                Base.metadata.create_all(bind=engine)
-                logger.info("Database initialization completed after enum fix")
-            except Exception as migration_error:
-                logger.error(f"Enum migration also failed: {migration_error}")
-                raise
+                # Import and run hotfix
+                import sys
+                import os
+                sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+                from hotfix_enum import hotfix_enum_database
+                hotfix_enum_database()
+                logger.info("Database initialization completed after hotfix")
+            except Exception as hotfix_error:
+                logger.error(f"Hotfix also failed: {hotfix_error}")
+                # Fallback to regular creation
+                try:
+                    Base.metadata.create_all(bind=engine)
+                    logger.info("Fallback initialization successful")
+                except Exception as fallback_error:
+                    logger.error(f"All initialization methods failed: {fallback_error}")
+                    raise
         else:
             raise
 
