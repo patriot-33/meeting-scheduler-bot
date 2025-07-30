@@ -95,6 +95,18 @@ async def show_available_slots(update: Update, context: ContextTypes.DEFAULT_TYP
                 f"Для назначения встреч сначала вернитесь в активный статус: /active"
             )
             return
+        
+        # CRITICAL: Check if manager has connected Google Calendar
+        if not user.email:
+            await update.message.reply_text(
+                "⚠️ ТРЕБУЕТСЯ ПОДКЛЮЧЕНИЕ GOOGLE CALENDAR\n\n"
+                "Для планирования встреч необходимо подключить ваш Google Calendar.\n"
+                "Используйте команду /calendar для настройки.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔗 Подключить календарь", callback_data="connect_calendar")]
+                ])
+            )
+            return
     
     try:
         with get_db() as db:
@@ -222,11 +234,23 @@ async def back_to_dates(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     # Re-show the date selection
-    await show_available_slots_inline(query)
+    user = context.user_data.get('user') if context else None
+    await show_available_slots_inline(query, user)
 
-async def show_available_slots_inline(query):
-    """Helper function to show date selection inline."""
+async def show_available_slots_inline(query, user=None):
+    """Helper function to show date selection inline with calendar validation."""
     try:
+        # Check calendar requirement if user provided
+        if user and not user.email:
+            await query.edit_message_text(
+                "⚠️ ТРЕБУЕТСЯ ПОДКЛЮЧЕНИЕ GOOGLE CALENDAR\n\n"
+                "Для планирования встреч необходимо подключить ваш Google Calendar.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔗 Подключить календарь", callback_data="connect_calendar")]
+                ])
+            )
+            return
+            
         with get_db() as db:
             meeting_service = MeetingService(db)
             available_slots = meeting_service.get_available_slots(days_ahead=14)
@@ -559,4 +583,5 @@ def get_manager_handlers():
         CallbackQueryHandler(show_manager_menu, pattern='^manager_menu$'),
         CallbackQueryHandler(cancel_meeting_callback, pattern=r'^cancel_meeting_\d+$'),
         CallbackQueryHandler(lambda u, c: show_available_slots(u, c), pattern='^schedule_meeting$'),
+        CallbackQueryHandler(lambda u, c: show_available_slots_inline(u.callback_query, c.user_data.get('user')), pattern='^schedule_meeting_inline$'),
     ]

@@ -276,12 +276,21 @@ class OwnerService:
     
     @staticmethod
     def get_available_slots_for_both_owners(days_ahead: int = 14) -> Dict[str, List[str]]:
-        """Получить доступные слоты, когда свободны владельцы (поддерживает 1+ владельца)"""
+        """NEW LOGIC: Get available slots when BOTH owners are free - checks intersections and both calendars."""
         available_slots = {}
         
-        # CRITICAL FIX: Import Google Calendar service for integration
         from services.google_calendar import google_calendar_service
-        from config import settings
+        from database import get_db, User, UserRole
+        
+        # Get exactly 2 owners with their calendar IDs
+        with get_db() as db:
+            owners = db.query(User).filter(User.role == UserRole.OWNER).limit(2).all()
+            
+            if len(owners) < 2:
+                logger.warning(f"⚠️ Найдено только {len(owners)} владельцев вместо 2. Проверяем только доступных.")
+                return {}  # Надо 2 владельца
+        
+        owner1, owner2 = owners[0], owners[1]
         
         # Генерируем слоты на указанное количество дней вперед
         for day_offset in range(1, days_ahead + 1):
@@ -292,54 +301,100 @@ class OwnerService:
                 continue
             
             date_str = check_date.strftime('%Y-%m-%d')
-            day_slots = []
+            day_of_week = check_date.weekday()  # 0=понедельник
             
-            # Проверяем каждый временной слот
-            for time_slot in TIME_SLOTS:
+            # STEP 1: Найти общие слоты в локальной базе
+            owner1_slots = set(OwnerService.get_owner_time_slots(owner1.id, day_of_week))
+            owner2_slots = set(OwnerService.get_owner_time_slots(owner2.id, day_of_week))
+            
+            # Общие слоты - пересечение множеств
+            common_local_slots = owner1_slots.intersection(owner2_slots)
+            
+            if not common_local_slots:
+                continue  # Нет общих слотов в локальной базе
+            
+            # STEP 2: Проверить каждый общий слот на Google Calendar
+            final_slots = []
+            
+            for time_slot in sorted(common_local_slots):
                 slot_datetime = datetime.combine(
                     check_date.date(),
                     datetime.strptime(time_slot, "%H:%M").time()
                 )
                 
-                # Check local owner availability first
-                if not OwnerService.are_both_owners_available(slot_datetime):
+                # Проверить блокировки владельцев
+                if (not OwnerService.is_owner_available_at_time(owner1.id, slot_datetime) or 
+                    not OwnerService.is_owner_available_at_time(owner2.id, slot_datetime)):
                     continue
                 
-                # CRITICAL FIX: Also check Google Calendar availability
-                is_google_calendar_free = True
-                if google_calendar_service.is_available and hasattr(settings, 'google_calendar_id_1') and settings.google_calendar_id_1:
-                    try:
-                        # Check Google Calendar busy times
-                        slot_end = slot_datetime + timedelta(hours=1)
-                        time_min = slot_datetime.isoformat() + 'Z'
-                        time_max = slot_end.isoformat() + 'Z'
-                        
-                        freebusy_query = {
-                            'timeMin': time_min,
-                            'timeMax': time_max,
-                            'items': [{'id': settings.google_calendar_id_1}]
-                        }
-                        
-                        freebusy_result = google_calendar_service._service.freebusy().query(body=freebusy_query).execute()
-                        busy_times = freebusy_result['calendars'][settings.google_calendar_id_1].get('busy', [])
-                        
-                        if busy_times:
-                            is_google_calendar_free = False
-                            logger.debug(f"Slot {time_slot} on {date_str} is busy in Google Calendar")
-                            
-                    except Exception as e:
-                        logger.error(f"Error checking Google Calendar for slot {time_slot}: {e}")
-                        # Be conservative - if we can't check, assume it's busy
-                        is_google_calendar_free = False
+                # STEP 3: Проверить Google Calendar обоих владельцев
+                both_calendars_free = True
+                calendar_errors = []
                 
-                # Only add slot if both local and Google Calendar checks pass
-                if is_google_calendar_free:
-                    day_slots.append(time_slot)
+                # Проверка календаря первого владельца
+                if owner1.google_calendar_id:
+                    is_free = OwnerService._check_google_calendar_slot(owner1.google_calendar_id, slot_datetime)
+                    if is_free is False:
+                        both_calendars_free = False
+                    elif is_free is None:
+                        calendar_errors.append(f"Овнер 1 ({owner1.first_name})")
+                        both_calendars_free = False  # Консервативный подход
+                else:
+                    logger.warning(f"⚠️ Овнер {owner1.first_name} не подключил Google Calendar")
+                    both_calendars_free = False
+                
+                # Проверка календаря второго владельца
+                if both_calendars_free and owner2.google_calendar_id:
+                    is_free = OwnerService._check_google_calendar_slot(owner2.google_calendar_id, slot_datetime)
+                    if is_free is False:
+                        both_calendars_free = False
+                    elif is_free is None:
+                        calendar_errors.append(f"Овнер 2 ({owner2.first_name})")
+                        both_calendars_free = False  # Консервативный подход
+                elif both_calendars_free:
+                    logger.warning(f"⚠️ Овнер {owner2.first_name} не подключил Google Calendar")
+                    both_calendars_free = False
+                
+                # Логирование ошибок
+                if calendar_errors:
+                    logger.error(f"❌ Google Calendar недоступен для: {', '.join(calendar_errors)} - слот {time_slot} блокируется")
+                
+                # Добавляем слот только если оба календаря свободны
+                if both_calendars_free:
+                    final_slots.append(time_slot)
             
-            if day_slots:
-                available_slots[date_str] = day_slots
+            if final_slots:
+                available_slots[date_str] = final_slots
         
         return available_slots
+    
+    @staticmethod
+    def _check_google_calendar_slot(calendar_id: str, slot_datetime: datetime) -> Optional[bool]:
+        """Check if a specific slot is free in Google Calendar. Returns True/False/None(error)."""
+        from services.google_calendar import google_calendar_service
+        
+        if not google_calendar_service.is_available:
+            return None  # Calendar service unavailable
+        
+        try:
+            slot_end = slot_datetime + timedelta(hours=1)
+            time_min = slot_datetime.isoformat() + 'Z'
+            time_max = slot_end.isoformat() + 'Z'
+            
+            freebusy_query = {
+                'timeMin': time_min,
+                'timeMax': time_max,
+                'items': [{'id': calendar_id}]
+            }
+            
+            freebusy_result = google_calendar_service._service.freebusy().query(body=freebusy_query).execute()
+            busy_times = freebusy_result['calendars'][calendar_id].get('busy', [])
+            
+            return len(busy_times) == 0  # True if no busy times
+            
+        except Exception as e:
+            logger.error(f"Error checking Google Calendar {calendar_id}: {e}")
+            return None  # Error occurred
     
     @staticmethod
     def format_availability_text(owner_id: int) -> str:

@@ -49,6 +49,7 @@ class User(Base):
     first_name = Column(String(255), nullable=False)
     last_name = Column(String(255), nullable=False)
     email = Column(String(255))  # Email для Google Calendar
+    google_calendar_id = Column(String(255))  # Персональный ID календаря для владельцев
     department = Column(Enum(Department, name='department', values_callable=lambda x: [e.value for e in x]), nullable=False)
     role = Column(Enum(UserRole, name='userrole', values_callable=lambda x: [e.value for e in x]), default=UserRole.PENDING)
     status = Column(Enum(UserStatus, name='userstatus', values_callable=lambda x: [e.value for e in x]), default=UserStatus.ACTIVE)
