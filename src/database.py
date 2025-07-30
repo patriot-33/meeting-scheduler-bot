@@ -148,17 +148,44 @@ def get_db():
     finally:
         db.close()
 
+def _ensure_email_field_exists():
+    """Проверить и добавить поле email в таблицу users если его нет"""
+    try:
+        from sqlalchemy import text, inspect
+        
+        # Проверяем существование колонки email
+        inspector = inspect(engine)
+        columns = inspector.get_columns('users')
+        column_names = [col['name'] for col in columns]
+        
+        if 'email' not in column_names:
+            logger.info("Добавляем поле email в таблицу users...")
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(255)"))
+                conn.commit()
+            logger.info("✅ Поле email успешно добавлено")
+        else:
+            logger.info("✅ Поле email уже существует")
+            
+    except Exception as e:
+        logger.warning(f"⚠️ Не удалось проверить/добавить поле email: {e}")
+        # Не прерываем инициализацию из-за этого
+
 def init_db():
     """Initialize database with proper enum handling for PostgreSQL."""
     try:
         # For PostgreSQL, we need to handle enum types carefully
         if settings.database_url.startswith('postgresql'):
             logger.info("Initializing PostgreSQL database with enum support...")
-            # Create all tables and enum types
+            # Create all tables and enum types (не удаляет существующие данные)
             Base.metadata.create_all(bind=engine)
+            
+            # Проверяем и добавляем поле email если его нет
+            _ensure_email_field_exists()
         else:
             # For SQLite and other databases
             Base.metadata.create_all(bind=engine)
+            _ensure_email_field_exists()
         logger.info("Database initialization completed successfully")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
