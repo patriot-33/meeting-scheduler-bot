@@ -4,7 +4,9 @@
 """
 import os
 import sys
-import requests
+import json
+import urllib.request
+import urllib.parse
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -21,25 +23,33 @@ if not BOT_TOKEN:
 # Telegram API URL
 API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
+def make_request(method, params=None):
+    """Выполнить запрос к Telegram API"""
+    url = f"{API_URL}/{method}"
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    
+    try:
+        with urllib.request.urlopen(url) as response:
+            return json.loads(response.read().decode('utf-8'))
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 def get_webhook_info():
     """Получить текущую информацию о webhook"""
-    response = requests.get(f"{API_URL}/getWebhookInfo")
-    return response.json()
+    return make_request("getWebhookInfo")
 
 def delete_webhook():
     """Удалить текущий webhook"""
-    response = requests.get(f"{API_URL}/deleteWebhook")
-    return response.json()
+    return make_request("deleteWebhook")
 
 def set_webhook(url):
     """Установить новый webhook"""
-    response = requests.get(f"{API_URL}/setWebhook", params={"url": url})
-    return response.json()
+    return make_request("setWebhook", {"url": url})
 
 def get_updates():
     """Получить обновления (для режима polling)"""
-    response = requests.get(f"{API_URL}/getUpdates")
-    return response.json()
+    return make_request("getUpdates")
 
 def main():
     print("🔍 Проверка webhook настроек...\n")

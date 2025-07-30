@@ -57,8 +57,11 @@ class Settings(BaseSettings):
     
     @validator('database_url')
     def validate_database_url(cls, v):
-        if not v or not v.startswith('postgresql'):
-            raise ValueError('PostgreSQL database URL is required')
+        if not v:
+            raise ValueError('Database URL is required')
+        # Поддерживаем PostgreSQL и SQLite для локального тестирования
+        if not (v.startswith('postgresql') or v.startswith('sqlite')):
+            raise ValueError('PostgreSQL or SQLite database URL is required')
         return v
 
 settings = Settings()
