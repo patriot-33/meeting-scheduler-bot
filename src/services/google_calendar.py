@@ -60,7 +60,7 @@ class GoogleCalendarService:
         
         return None
     
-    async def test_calendar_access(self, calendar_id: str) -> Dict[str, Any]:
+    def test_calendar_access(self, calendar_id: str) -> Dict[str, Any]:
         """Test if service account has access to a calendar."""
         try:
             if not self._is_available:

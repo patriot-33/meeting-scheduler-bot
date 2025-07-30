@@ -51,6 +51,7 @@ class User(Base):
     email = Column(String(255))  # Email для Google Calendar
     google_calendar_id = Column(String(255))  # Персональный ID календаря
     oauth_credentials = Column(Text)  # OAuth токены для руководителей
+    calendar_connected = Column(Boolean, default=False)  # Статус подключения календаря
     department = Column(Enum(Department, name='department', values_callable=lambda x: [e.value for e in x]), nullable=False)
     role = Column(Enum(UserRole, name='userrole', values_callable=lambda x: [e.value for e in x]), default=UserRole.PENDING)
     status = Column(Enum(UserStatus, name='userstatus', values_callable=lambda x: [e.value for e in x]), default=UserStatus.ACTIVE)

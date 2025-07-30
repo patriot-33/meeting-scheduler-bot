@@ -14,7 +14,7 @@ from aiohttp.web import Request
 
 from config import settings
 from database import init_db
-from handlers import registration, admin, manager, common, owner, manager_calendar
+from handlers import registration, admin, manager, common, owner, manager_calendar, manager_calendar_simple
 from services.reminder_service import ReminderService
 from utils.scheduler import setup_scheduler
 
@@ -135,6 +135,8 @@ def main():
     application.add_handler(CallbackQueryHandler(owner.handle_owner_callback, pattern="^owner_"))
     # Note: manager booking callbacks are handled by get_manager_handlers() below
     application.add_handler(CallbackQueryHandler(manager_calendar.handle_calendar_callback, pattern="^(send_email_to_owner|calendar_faq|connect_calendar|reconnect_calendar)$"))
+    application.add_handler(CallbackQueryHandler(manager_calendar_simple.simple_calendar_faq, pattern="^simple_calendar_faq$"))
+    application.add_handler(CallbackQueryHandler(lambda u, c: u.callback_query.answer("📋 Email скопирован!"), pattern="^copy_service_email:"))
     application.add_handler(CallbackQueryHandler(common.handle_navigation_callback, pattern="^nav_"))
     
     # Command handlers (lowest priority)
@@ -174,7 +176,11 @@ def main():
             application.add_handler(CommandHandler(command_name, handler_function))
         except AttributeError:
             logger.debug(f"Manager command '{command_name}' not available - skipping")
-    application.add_handler(CommandHandler("calendar", manager_calendar.connect_calendar))
+    # Calendar connection handlers - multiple options
+    application.add_handler(CommandHandler("calendar", manager_calendar.connect_calendar))  # OAuth method
+    application.add_handler(CommandHandler("calendar_simple", manager_calendar_simple.simple_calendar_connect))  # Simple method
+    application.add_handler(CommandHandler("setcalendar", manager_calendar_simple.set_calendar_id))  # Set calendar ID
+    application.add_handler(CommandHandler("disconnect_calendar", manager_calendar_simple.disconnect_calendar))  # Disconnect calendar
     application.add_handler(CommandHandler("email", manager_calendar.save_manager_email))
     
     # Error handler

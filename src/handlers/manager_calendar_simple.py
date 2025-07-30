@@ -8,7 +8,7 @@ from telegram.ext import ContextTypes
 
 from database import get_db, User, UserRole
 from utils.decorators import require_registration
-from services.google_calendar import calendar_service
+from services.google_calendar import google_calendar_service as calendar_service
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -104,33 +104,94 @@ async def set_calendar_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    calendar_id = context.args[0]
+    calendar_id = context.args[0].strip()
     user_id = update.effective_user.id
     
-    # Validate calendar ID format
-    if '@' not in calendar_id:
+    # BULLETPROOF валидация calendar_id
+    import re
+    from html import escape
+    
+    # Sanitize input
+    calendar_id = escape(calendar_id)
+    
+    # Validate format (email-like structure)
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_pattern, calendar_id):
         await update.message.reply_text(
-            "❌ Неверный формат Calendar ID.\n"
-            "Должен содержать @, например: `your.email@gmail.com`",
+            "❌ **Неверный формат Calendar ID**\n\n"
+            "Требования:\n"
+            "• Должен быть валидным email\n"
+            "• Только латинские буквы, цифры, точки, дефисы\n"
+            "• Пример: `your.email@gmail.com`\n"
+            "• Максимум 320 символов",
             parse_mode='Markdown'
         )
         return
     
-    with get_db() as db:
-        user = db.query(User).filter(User.telegram_id == user_id).first()
+    # Additional security checks
+    if len(calendar_id) > 320:  # RFC 5321 limit
+        await update.message.reply_text("❌ Calendar ID слишком длинный (максимум 320 символов)")
+        return
         
-        if not user or user.role != UserRole.MANAGER:
-            await update.message.reply_text("❌ Функция доступна только руководителям.")
+    # Prevent common attack vectors
+    dangerous_patterns = [
+        r'[<>"\']',  # HTML/JS injection
+        r'[;|&`$()]',  # Command injection
+        r'\.\./',  # Path traversal
+        r'script|javascript|vbscript',  # Script injection
+    ]
+    
+    for pattern in dangerous_patterns:
+        if re.search(pattern, calendar_id, re.IGNORECASE):
+            await update.message.reply_text("❌ Calendar ID содержит недопустимые символы")
             return
-        
-        # Test calendar access
+    
+    # BULLETPROOF: Атомарная транзакция с проверками
+    with get_db() as db:
         try:
-            test_result = await calendar_service.test_calendar_access(calendar_id)
+            # Start transaction
+            user = db.query(User).filter(User.telegram_id == user_id).first()
+            
+            if not user or user.role != UserRole.MANAGER:
+                await update.message.reply_text("❌ Функция доступна только руководителям.")
+                return
+            
+            # Check for conflicts with existing OAuth setup
+            if user.oauth_credentials:
+                await update.message.reply_text(
+                    "⚠️ **Конфликт методов подключения**\n\n"
+                    "Ваш календарь уже подключен через OAuth.\n"
+                    "Для переключения на простой метод:\n\n"
+                    "1. Отключите OAuth: `/disconnect_calendar`\n"
+                    "2. Повторите команду `/setcalendar`",
+                    parse_mode='Markdown'
+                )
+                return
+            
+            # Check if calendar already used by another user
+            existing_user = db.query(User).filter(
+                User.google_calendar_id == calendar_id,
+                User.telegram_id != user_id
+            ).first()
+            
+            if existing_user:
+                await update.message.reply_text(
+                    f"❌ **Calendar ID уже используется**\n\n"
+                    f"Этот календарь уже подключен к другому пользователю.\n"
+                    f"Каждый календарь может быть привязан только к одному руководителю."
+                )
+                return
+            
+            # Test calendar access BEFORE saving
+            test_result = calendar_service.test_calendar_access(calendar_id)
             
             if test_result['success']:
-                # Save calendar ID
+                # ATOMIC UPDATE: все изменения в одной транзакции
                 user.google_calendar_id = calendar_id
                 user.calendar_connected = True
+                user.oauth_credentials = None  # Clear OAuth if was set
+                
+                # Commit transaction
                 db.commit()
                 
                 await update.message.reply_text(
@@ -161,11 +222,21 @@ async def set_calendar_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         f"❌ **Ошибка доступа к календарю**\n\n{error_msg}",
                         parse_mode='Markdown'
                     )
-                    
+        
         except Exception as e:
-            logger.error(f"Error testing calendar access: {e}")
+            # Rollback transaction on any error
+            db.rollback()
+            logger.error(f"Transaction failed during calendar setup: {e}")
             await update.message.reply_text(
-                "❌ Ошибка при проверке календаря. Попробуйте позже."
+                "❌ **Критическая ошибка при настройке календаря**\n\n"
+                "Транзакция отменена. Данные не изменены.\n"
+                "Попробуйте позже или обратитесь к администратору."
+            )
+            
+        except Exception as e:
+            logger.error(f"Database error in calendar setup: {e}")
+            await update.message.reply_text(
+                "❌ Ошибка базы данных. Обратитесь к администратору."
             )
 
 async def simple_calendar_faq(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -206,3 +277,42 @@ A: Нет, работает с обычным Gmail аккаунтом
         reply_markup=reply_markup,
         parse_mode='Markdown'
     )
+
+@require_registration
+async def disconnect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отключение календаря руководителя."""
+    user_id = update.effective_user.id
+    
+    with get_db() as db:
+        try:
+            user = db.query(User).filter(User.telegram_id == user_id).first()
+            
+            if not user or user.role != UserRole.MANAGER:
+                await update.message.reply_text("❌ Функция доступна только руководителям.")
+                return
+            
+            if not user.google_calendar_id and not user.oauth_credentials:
+                await update.message.reply_text("ℹ️ Календарь не подключен.")
+                return
+            
+            # Clear all calendar connections
+            connection_type = "OAuth" if user.oauth_credentials else "Simple"
+            user.google_calendar_id = None
+            user.oauth_credentials = None
+            user.calendar_connected = False
+            
+            db.commit()
+            
+            await update.message.reply_text(
+                f"✅ **Календарь отключен**\n\n"
+                f"Метод подключения: {connection_type}\n"
+                f"Теперь вы можете подключить календарь заново:\n\n"
+                f"• Простой метод: `/calendar_simple`\n"
+                f"• OAuth метод: `/calendar`",
+                parse_mode='Markdown'
+            )
+            
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error disconnecting calendar: {e}")
+            await update.message.reply_text("❌ Ошибка при отключении календаря.")
