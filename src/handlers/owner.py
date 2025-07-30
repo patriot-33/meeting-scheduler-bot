@@ -479,7 +479,9 @@ def get_owner_conversation_handler():
             CommandHandler('my_meetings', cancel_and_redirect_meetings),
             MessageHandler(filters.ALL, handle_stale_conversation)  # Ловит все сообщения
         ],
-        per_message=False
+        per_message=True,
+        per_chat=True,
+        per_user=True,
     )
 
 async def cancel_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):

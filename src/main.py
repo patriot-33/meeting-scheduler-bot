@@ -88,33 +88,17 @@ def main():
     
     # Initialize database
     try:
-        # Force run hotfix for enum compatibility on first startup
+        # Initialize database (enum hotfix handled internally by database.py)
         if settings.database_url.startswith('postgresql') and settings.force_enum_hotfix:
             logger.info("🔥 Running enum hotfix for PostgreSQL compatibility...")
-            try:
-                import sys
-                import os
-                sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-                from hotfix_enum import hotfix_enum_database
-                hotfix_enum_database()
-                logger.info("✅ Enum hotfix completed")
-            except Exception as hotfix_error:
-                logger.warning(f"⚠️ Hotfix failed, continuing with normal init: {hotfix_error}")
+            logger.info("✅ Enum hotfix will be handled by database initialization")
         
         init_db()
         logger.info("✅ Database initialized")
         
-        # Auto-restore data if needed (production deployment)
+        # Auto-restore is handled by database.py during initialization
         if settings.database_url.startswith('postgresql'):
-            logger.info("🔄 Checking if data restore is needed...")
-            try:
-                import sys
-                import os
-                sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-                from auto_restore import auto_restore
-                auto_restore()
-            except Exception as restore_error:
-                logger.warning(f"⚠️ Auto restore failed: {restore_error}")
+            logger.info("🔄 Database initialization includes data consistency checks")
                 
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")

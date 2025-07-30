@@ -201,5 +201,7 @@ def get_registration_handler():
             DEPARTMENT: [CallbackQueryHandler(get_department, pattern="^dept_")]
         },
         fallbacks=[CommandHandler('cancel', cancel_registration)],
-        per_message=False,
+        per_message=True,
+        per_chat=True,
+        per_user=True,
     )
