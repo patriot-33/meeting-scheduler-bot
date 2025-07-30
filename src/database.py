@@ -5,8 +5,11 @@ from sqlalchemy.sql import func
 import enum
 from datetime import datetime
 from contextlib import contextmanager
+import logging
 
 from src.config import settings
+
+logger = logging.getLogger(__name__)
 
 Base = declarative_base()
 
@@ -45,9 +48,9 @@ class User(Base):
     telegram_username = Column(String(255))
     first_name = Column(String(255), nullable=False)
     last_name = Column(String(255), nullable=False)
-    department = Column(Enum(Department), nullable=False)
-    role = Column(Enum(UserRole), default=UserRole.PENDING)
-    status = Column(Enum(UserStatus), default=UserStatus.ACTIVE)
+    department = Column(Enum(Department, name='department'), nullable=False)
+    role = Column(Enum(UserRole, name='userrole'), default=UserRole.PENDING)
+    status = Column(Enum(UserStatus, name='userstatus'), default=UserStatus.ACTIVE)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
     
@@ -62,7 +65,7 @@ class Meeting(Base):
     scheduled_time = Column(DateTime, nullable=False)
     google_event_id = Column(String(255), unique=True)
     google_meet_link = Column(String(500))
-    status = Column(Enum(MeetingStatus), default=MeetingStatus.SCHEDULED)
+    status = Column(Enum(MeetingStatus, name='meetingstatus'), default=MeetingStatus.SCHEDULED)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
     
@@ -146,7 +149,33 @@ def get_db():
         db.close()
 
 def init_db():
-    Base.metadata.create_all(bind=engine)
+    """Initialize database with proper enum handling for PostgreSQL."""
+    try:
+        # For PostgreSQL, we need to handle enum types carefully
+        if settings.database_url.startswith('postgresql'):
+            logger.info("Initializing PostgreSQL database with enum support...")
+            # Create all tables and enum types
+            Base.metadata.create_all(bind=engine)
+        else:
+            # For SQLite and other databases
+            Base.metadata.create_all(bind=engine)
+        logger.info("Database initialization completed successfully")
+    except Exception as e:
+        logger.error(f"Database initialization failed: {e}")
+        # Try to run enum migration if it's an enum-related error
+        if "enum" in str(e).lower() or "invalid input value" in str(e).lower():
+            logger.info("Attempting to fix enum compatibility issues...")
+            try:
+                from fix_enum_migration import fix_enum_migration
+                fix_enum_migration()
+                # Retry initialization
+                Base.metadata.create_all(bind=engine)
+                logger.info("Database initialization completed after enum fix")
+            except Exception as migration_error:
+                logger.error(f"Enum migration also failed: {migration_error}")
+                raise
+        else:
+            raise
 
 if __name__ == "__main__":
     print("Initializing database...")
