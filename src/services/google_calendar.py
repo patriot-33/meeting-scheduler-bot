@@ -7,7 +7,7 @@ from googleapiclient.errors import HttpError
 import pytz
 from functools import lru_cache
 
-from src.config import settings
+from config import settings
 
 logger = logging.getLogger(__name__)
 

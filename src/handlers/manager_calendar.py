@@ -5,9 +5,9 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from src.database import get_db, User, UserRole
-from src.utils.decorators import require_registration
-from src.config import settings
+from database import get_db, User, UserRole
+from utils.decorators import require_registration
+from config import settings
 
 logger = logging.getLogger(__name__)
 

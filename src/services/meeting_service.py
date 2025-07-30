@@ -3,10 +3,10 @@ from sqlalchemy import and_
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 
-from src.database import Meeting, User, MeetingStatus, UserStatus, UserRole
-from src.services.google_calendar import GoogleCalendarService
-from src.services.reminder_service import ReminderService
-from src.services.owner_service import OwnerService
+from database import Meeting, User, MeetingStatus, UserStatus, UserRole
+from services.google_calendar import GoogleCalendarService
+from services.reminder_service import ReminderService
+from services.owner_service import OwnerService
 
 class MeetingService:
     def __init__(self, db: Session):

@@ -10,11 +10,11 @@ from telegram.ext import (
     filters,
 )
 
-from src.config import settings
-from src.database import init_db
-from src.handlers import registration, admin, manager, common, owner, manager_calendar
-from src.services.reminder_service import ReminderService
-from src.utils.scheduler import setup_scheduler
+from config import settings
+from database import init_db
+from handlers import registration, admin, manager, common, owner, manager_calendar
+from services.reminder_service import ReminderService
+from utils.scheduler import setup_scheduler
 
 # Configure logging for small team
 logging.basicConfig(
@@ -80,7 +80,7 @@ def main():
     logger.info("🚀 Starting Meeting Scheduler Bot for team...")
     
     # Health check before startup
-    from src.utils.health_check import health_check
+    from utils.health_check import health_check
     health = health_check()
     if health['status'] != 'healthy':
         logger.error(f"❌ Health check failed: {health}")

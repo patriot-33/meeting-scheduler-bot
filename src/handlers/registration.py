@@ -9,8 +9,8 @@ from telegram.ext import (
 )
 import logging
 
-from src.database import get_db, User, UserRole, Department
-from src.config import settings
+from database import get_db, User, UserRole, Department
+from config import settings
 
 logger = logging.getLogger(__name__)
 

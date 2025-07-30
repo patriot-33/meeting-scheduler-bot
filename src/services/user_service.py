@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from src.database import User, UserRole, UserStatus
+from database import User, UserRole, UserStatus
 from typing import List, Optional
 
 class UserService:

@@ -4,6 +4,8 @@ services:
     runtime: docker
     repo: https://github.com/patriot-33/meeting-scheduler-bot
     branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: cd src && python main.py
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
@@ -14,6 +16,8 @@ services:
         value: 8443
       - key: PYTHON_VERSION
         value: 3.11
+      - key: PYTHONPATH
+        value: /opt/render/project/src
 
 databases:
   - name: meeting-scheduler-db

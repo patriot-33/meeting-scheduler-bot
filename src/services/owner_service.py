@@ -7,8 +7,8 @@ from typing import List, Dict, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 
-from src.database import get_db, User, UserRole, OwnerAvailability, OwnerBlockedTime
-from src.config import settings
+from database import get_db, User, UserRole, OwnerAvailability, OwnerBlockedTime
+from config import settings
 
 logger = logging.getLogger(__name__)
 

@@ -5,8 +5,8 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 
-from src.services.owner_service import OwnerService, WEEKDAYS, TIME_SLOTS
-from src.utils.decorators import require_owner
+from services.owner_service import OwnerService, WEEKDAYS, TIME_SLOTS
+from utils.decorators import require_owner
 
 logger = logging.getLogger(__name__)
 

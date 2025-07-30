@@ -2,8 +2,8 @@ from telegram import Update
 from telegram.ext import ContextTypes
 import logging
 
-from src.database import get_db, User, UserRole
-from src.config import settings
+from database import get_db, User, UserRole
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_id in settings.admin_ids_list:
             if not user:
                 # Создаем владельца
-                from src.database import Department
+                from database import Department
                 user = User(
                     telegram_id=user_id,
                     telegram_username=update.effective_user.username,

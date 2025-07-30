@@ -4,9 +4,9 @@ from datetime import datetime, timedelta
 import logging
 from sqlalchemy import and_
 
-from src.database import get_db, User, Meeting, UserRole, UserStatus, MeetingStatus, Department
-from src.config import settings
-from src.utils.decorators import require_admin
+from database import get_db, User, Meeting, UserRole, UserStatus, MeetingStatus, Department
+from config import settings
+from utils.decorators import require_admin
 
 logger = logging.getLogger(__name__)
 

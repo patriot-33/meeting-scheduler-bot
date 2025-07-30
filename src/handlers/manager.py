@@ -4,13 +4,13 @@ from datetime import datetime, timedelta
 import logging
 from sqlalchemy import and_
 
-from src.database import get_db, User, Meeting, UserRole, UserStatus, MeetingStatus, Reminder
-from src.services.meeting_service import MeetingService
-from src.services.owner_service import OwnerService
-from src.services.google_calendar import GoogleCalendarService
-from src.services.reminder_service import ReminderService
-from src.config import settings
-from src.utils.decorators import require_registration
+from database import get_db, User, Meeting, UserRole, UserStatus, MeetingStatus, Reminder
+from services.meeting_service import MeetingService
+from services.owner_service import OwnerService
+from services.google_calendar import GoogleCalendarService
+from services.reminder_service import ReminderService
+from config import settings
+from utils.decorators import require_registration
 
 logger = logging.getLogger(__name__)
 

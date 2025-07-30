@@ -5,8 +5,8 @@ import asyncio
 from telegram import Bot
 from sqlalchemy import and_
 
-from src.database import get_db, User, Meeting, Reminder, UserStatus, MeetingStatus
-from src.config import settings
+from database import get_db, User, Meeting, Reminder, UserStatus, MeetingStatus
+from config import settings
 
 logger = logging.getLogger(__name__)
 

@@ -3,9 +3,9 @@ from telegram.ext import ContextTypes
 from sqlalchemy import func
 import logging
 
-from src.database import get_db, User, Meeting, UserRole, UserStatus, MeetingStatus
-from src.config import settings
-from src.utils.decorators import require_admin
+from database import get_db, User, Meeting, UserRole, UserStatus, MeetingStatus
+from config import settings
+from utils.decorators import require_admin
 
 logger = logging.getLogger(__name__)
 

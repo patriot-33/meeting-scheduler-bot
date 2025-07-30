@@ -7,7 +7,7 @@ from datetime import datetime
 from contextlib import contextmanager
 import logging
 
-from src.config import settings
+from config import settings
 
 logger = logging.getLogger(__name__)
 

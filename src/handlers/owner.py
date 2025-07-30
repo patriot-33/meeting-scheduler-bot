@@ -6,10 +6,10 @@ from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 
-from src.database import get_db, User, UserRole, Department, UserStatus
-from src.services.owner_service import OwnerService, WEEKDAYS, TIME_SLOTS
-from src.utils.decorators import require_owner
-from src.config import settings
+from database import get_db, User, UserRole, Department, UserStatus
+from services.owner_service import OwnerService, WEEKDAYS, TIME_SLOTS
+from utils.decorators import require_owner
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 (SET_AVAILABILITY_START, SET_AVAILABILITY_END, BLOCK_TIME_START, BLOCK_TIME_END, BLOCK_TIME_REASON) = range(5)
 
 # Импортируем состояния из owner_slots
-from src.handlers.owner_slots import (
+from handlers.owner_slots import (
     ADD_SLOT_DAY, ADD_SLOT_TIME, REMOVE_SLOT_DAY, REMOVE_SLOT_TIME, 
     SETUP_DAY, SETUP_SLOTS
 )
@@ -296,7 +296,7 @@ async def show_managers_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def show_pending_managers(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Показать ожидающих одобрения руководителей - делегируем в admin.py"""
     # Импортируем функцию из admin для избежания дублирования
-    from src.handlers.admin import show_pending_users_callback
+    from handlers.admin import show_pending_users_callback
     # Устанавливаем правильный callback для возврата в меню владельца
     context.user_data['return_to'] = 'owner_managers'
     await show_pending_users_callback(update, context)
@@ -372,7 +372,7 @@ async def approve_manager(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def reject_manager(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отклонить руководителя - делегируем в admin.py"""
-    from src.handlers.admin import reject_user_callback
+    from handlers.admin import reject_user_callback
     await reject_user_callback(update, context, int(update.callback_query.data.split('_')[2]))
 
 async def handle_owner_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -435,7 +435,7 @@ async def handle_owner_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
 def get_owner_conversation_handler():
     """Получить conversation handler для владельцев"""
-    from src.handlers.owner_slots import (
+    from handlers.owner_slots import (
         add_slot_day, add_slot_time, remove_slot_day, remove_slot_time,
         setup_day_select, toggle_slot, save_day_setup, handle_slot_exists,
         add_more_slot_same_day, ADD_SLOT_DAY, ADD_SLOT_TIME, REMOVE_SLOT_DAY, 
@@ -500,35 +500,35 @@ async def cancel_and_redirect_owner(update: Update, context: ContextTypes.DEFAUL
 async def cancel_and_redirect_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отменить conversation и перейти в /admin"""
     context.user_data.clear()
-    from src.handlers.admin import admin_menu
+    from handlers.admin import admin_menu
     await admin_menu(update, context)
     return ConversationHandler.END
 
 async def cancel_and_redirect_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отменить conversation и перейти в /start"""
     context.user_data.clear()
-    from src.handlers.common import start_command
+    from handlers.common import start_command
     await start_command(update, context)
     return ConversationHandler.END
 
 async def cancel_and_redirect_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отменить conversation и перейти в /help"""
     context.user_data.clear()
-    from src.handlers.common import help_command
+    from handlers.common import help_command
     await help_command(update, context)
     return ConversationHandler.END
 
 async def cancel_and_redirect_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отменить conversation и перейти в /schedule"""
     context.user_data.clear()
-    from src.handlers.manager import show_available_slots
+    from handlers.manager import show_available_slots
     await show_available_slots(update, context)
     return ConversationHandler.END
 
 async def cancel_and_redirect_meetings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отменить conversation и перейти в /my_meetings"""
     context.user_data.clear()
-    from src.handlers.manager import show_my_meetings
+    from handlers.manager import show_my_meetings
     await show_my_meetings(update, context)
     return ConversationHandler.END
 

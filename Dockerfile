@@ -22,5 +22,7 @@ COPY . .
 RUN useradd -m -u 1000 botuser && chown -R botuser:botuser /app
 USER botuser
 
-# Run the bot
-CMD ["python", "-m", "src.main"]
+# Set Python path and run the bot
+ENV PYTHONPATH=/app/src
+WORKDIR /app/src
+CMD ["python", "main.py"]

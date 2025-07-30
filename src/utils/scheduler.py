@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 import logging
 import pytz
 
-from src.config import settings
-from src.services.reminder_service import ReminderService
+from config import settings
+from services.reminder_service import ReminderService
 
 logger = logging.getLogger(__name__)
 

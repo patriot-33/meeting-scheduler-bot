@@ -3,8 +3,8 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from src.database import get_db, User, UserRole
-from src.config import settings
+from database import get_db, User, UserRole
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ def require_owner(func):
                 # Автоматически создаем владельца если его нет в БД
                 logger.info(f"Creating owner user for ID {user_id}")
                 try:
-                    from src.database import Department
+                    from database import Department
                     owner_user = User(
                         telegram_id=user_id,
                         telegram_username=update.effective_user.username,

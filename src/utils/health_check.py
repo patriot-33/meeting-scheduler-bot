@@ -2,8 +2,8 @@
 import logging
 from datetime import datetime
 from sqlalchemy import text
-from src.database import engine
-from src.config import settings
+from database import engine
+from config import settings
 
 logger = logging.getLogger(__name__)
 
