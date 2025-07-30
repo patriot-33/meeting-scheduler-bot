@@ -129,7 +129,11 @@ engine = create_engine(
     max_overflow=2,
     pool_recycle=3600,  # Recycle connections every hour
     pool_pre_ping=True,  # Verify connections before use
-    echo=settings.debug  # Only log SQL in debug mode
+    echo=settings.debug,  # Only log SQL in debug mode
+    # PostgreSQL-specific settings for better enum handling
+    connect_args={
+        "options": "-c timezone=UTC"
+    } if settings.database_url.startswith('postgresql') else {}
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

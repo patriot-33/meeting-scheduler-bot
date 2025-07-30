@@ -101,8 +101,8 @@ class GoogleCalendarService:
         end_time = start_time + timedelta(minutes=settings.meeting_duration_minutes)
         
         event = {
-            'summary': f'!>72>= A {department}',
-            'description': f' 53C;O@=K9 A>72>= A @C:>2>48B5;5< >B45;0 {department}\n C:>2>48B5;L: {manager_name}',
+            'summary': f'Созвон с {department}',
+            'description': f'Еженедельный созвон с руководителем отдела {department}\nРуководитель: {manager_name}',
             'start': {
                 'dateTime': start_time.isoformat(),
                 'timeZone': settings.timezone,

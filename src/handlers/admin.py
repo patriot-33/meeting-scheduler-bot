@@ -240,8 +240,24 @@ async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TY
             "/broadcast <ваше сообщение>"
         )
     elif data.startswith("admin_approve_"):
-        user_id = int(data.split("_")[2])
-        await approve_user(update, context, user_id)
+        try:
+            parts = data.split("_")
+            if len(parts) >= 3 and parts[2].isdigit():
+                user_id = int(parts[2])
+                await approve_user(update, context, user_id)
+            else:
+                await query.edit_message_text("❌ Некорректные данные для одобрения пользователя")
+        except (ValueError, IndexError) as e:
+            await query.edit_message_text("❌ Ошибка обработки данных")
+            logger.error(f"Error parsing approve callback data: {e}")
     elif data.startswith("admin_reject_"):
-        user_id = int(data.split("_")[2])
-        await reject_user(update, context, user_id)
+        try:
+            parts = data.split("_")
+            if len(parts) >= 3 and parts[2].isdigit():
+                user_id = int(parts[2])
+                await reject_user(update, context, user_id)
+            else:
+                await query.edit_message_text("❌ Некорректные данные для отклонения пользователя")
+        except (ValueError, IndexError) as e:
+            await query.edit_message_text("❌ Ошибка обработки данных")
+            logger.error(f"Error parsing reject callback data: {e}")

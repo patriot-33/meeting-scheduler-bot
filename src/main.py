@@ -34,17 +34,25 @@ logging.getLogger('googleapiclient').setLevel(logging.WARNING)
 
 async def error_handler(update: Update, context):
     """Log errors caused by updates."""
-    # Don't log sensitive update data in production
-    if settings.debug:
-        logger.error(f"Update {update} caused error {context.error}")
+    from sqlalchemy.exc import DataError, IntegrityError, DatabaseError
+    
+    error_type = type(context.error).__name__
+    
+    # Handle specific database errors
+    if isinstance(context.error, (DataError, IntegrityError, DatabaseError)):
+        logger.error(f"Database error occurred: {error_type} - {str(context.error)}")
+        user_message = "⚠️ Ошибка обработки данных. Проверьте корректность введенной информации."
     else:
-        logger.error(f"Error occurred: {type(context.error).__name__}")
+        # Don't log sensitive update data in production
+        if settings.debug:
+            logger.error(f"Update {update} caused error {context.error}")
+        else:
+            logger.error(f"Error occurred: {error_type}")
+        user_message = "⚠️ Произошла техническая ошибка. Попробуйте позже."
     
     if update and update.effective_message:
         try:
-            await update.effective_message.reply_text(
-                "⚠️ Произошла техническая ошибка. Попробуйте позже."
-            )
+            await update.effective_message.reply_text(user_message)
         except Exception as e:
             logger.error(f"Failed to send error message: {e}")
 
