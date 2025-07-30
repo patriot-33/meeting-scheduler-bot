@@ -281,6 +281,30 @@ class GoogleCalendarService:
             logger.error(f"Error creating meeting: {e}")
             return None, None
     
+    def cancel_meeting(self, event_id: str) -> bool:
+        """Cancel a meeting in Google Calendar by event ID."""
+        if not self.is_available:
+            logger.warning("Google Calendar not available - cannot cancel meeting")
+            return False
+        
+        if not event_id:
+            logger.error("No event ID provided for cancellation")
+            return False
+        
+        try:
+            # Delete the event from Google Calendar
+            self._service.events().delete(
+                calendarId='primary',
+                eventId=event_id
+            ).execute()
+            
+            logger.info(f"Successfully cancelled Google Calendar event: {event_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error cancelling Google Calendar event {event_id}: {e}")
+            return False
+    
     def health_check(self) -> Dict[str, Any]:
         """Perform health check for Google Calendar service."""
         health_status = {

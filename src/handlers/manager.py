@@ -12,6 +12,9 @@ from utils.decorators import require_registration
 
 logger = logging.getLogger(__name__)
 
+# Create MeetingService instance
+meeting_service = MeetingService()
+
 async def notify_owners_about_meeting(context: ContextTypes.DEFAULT_TYPE, meeting, manager: User):
     """Send telegram notification to all owners about new meeting."""
     try:
@@ -96,7 +99,7 @@ async def show_available_slots(update: Update, context: ContextTypes.DEFAULT_TYP
     
     try:
         with get_db() as db:
-            meeting_service = MeetingService(db)
+            # Use global meeting_service instance
             
             # Get available slots when owners are free
             available_slots = meeting_service.get_available_slots(days_ahead=14)
@@ -159,7 +162,7 @@ async def show_day_slots(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         with get_db() as db:
-            meeting_service = MeetingService(db)
+            # Use global meeting_service instance
             available_slots = meeting_service.get_available_slots(days_ahead=14)
             
             if date_str not in available_slots:
@@ -226,7 +229,7 @@ async def show_available_slots_inline(query):
     """Helper function to show date selection inline."""
     try:
         with get_db() as db:
-            meeting_service = MeetingService(db)
+            # Use global meeting_service instance
             available_slots = meeting_service.get_available_slots(days_ahead=14)
             
             if not available_slots:
@@ -267,6 +270,173 @@ async def show_available_slots_inline(query):
             "Произошла ошибка при загрузке слотов. Попробуйте позже."
         )
 
+@require_registration
+async def show_my_meetings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show user's scheduled meetings with cancellation options."""
+    try:
+        user = context.user_data.get('user')
+        if not user:
+            await update.callback_query.answer("❌ Пользователь не найден")
+            return
+        
+        # Get user's meetings
+        with get_db() as db:
+            meetings = db.query(Meeting).filter(
+                Meeting.manager_id == user.id,
+                Meeting.status == MeetingStatus.SCHEDULED,
+                Meeting.scheduled_time > datetime.now()
+            ).order_by(Meeting.scheduled_time).all()
+        
+        if not meetings:
+            await update.callback_query.edit_message_text(
+                "📅 У вас нет запланированных встреч",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("◀️ Назад", callback_data="manager_menu")]
+                ])
+            )
+            return
+        
+        # Build meetings list with cancel buttons
+        keyboard = []
+        text = "📅 ВАШИ ЗАПЛАНИРОВАННЫЕ ВСТРЕЧИ:\n\n"
+        
+        for meeting in meetings:
+            formatted_date = meeting.scheduled_time.strftime('%d.%m.%Y')
+            formatted_time = meeting.scheduled_time.strftime('%H:%M')
+            day_name = meeting.scheduled_time.strftime('%A')
+            
+            # Russian day names
+            russian_days = {
+                'Monday': 'Пн', 'Tuesday': 'Вт', 'Wednesday': 'Ср',
+                'Thursday': 'Чт', 'Friday': 'Пт', 'Saturday': 'Сб', 'Sunday': 'Вс'
+            }
+            russian_day = russian_days.get(day_name, day_name)
+            
+            text += f"🗓 {russian_day} {formatted_date} в {formatted_time}\n"
+            text += f"📋 ID: {meeting.id}\n"
+            if meeting.google_meet_link:
+                text += f"🔗 Google Meet\n"
+            text += "\n"
+            
+            # Add cancel button for each meeting
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"❌ Отменить встречу {formatted_date}", 
+                    callback_data=f"cancel_meeting_{meeting.id}"
+                )
+            ])
+        
+        keyboard.append([InlineKeyboardButton("◀️ Назад в меню", callback_data="manager_menu")])
+        
+        await update.callback_query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    except Exception as e:
+        logger.error(f"Error showing meetings: {e}")
+        await update.callback_query.answer("❌ Ошибка при загрузке встреч")
+
+@require_registration
+async def cancel_meeting_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle meeting cancellation."""
+    try:
+        query = update.callback_query
+        meeting_id = int(query.data.split('_')[2])
+        user = context.user_data.get('user')
+        
+        if not user:
+            await query.answer("❌ Пользователь не найден")
+            return
+        
+        # Verify meeting belongs to user
+        with get_db() as db:
+            meeting = db.query(Meeting).filter(
+                Meeting.id == meeting_id,
+                Meeting.manager_id == user.id,
+                Meeting.status == MeetingStatus.SCHEDULED
+            ).first()
+            
+            if not meeting:
+                await query.answer("❌ Встреча не найдена или уже отменена")
+                return
+            
+            # Check if meeting is too soon (less than 2 hours)
+            time_until_meeting = meeting.scheduled_time - datetime.now()
+            if time_until_meeting.total_seconds() < 7200:  # 2 hours
+                await query.answer("❌ Нельзя отменить встречу менее чем за 2 часа")
+                return
+            
+            # Cancel the meeting
+            success = meeting_service.cancel_meeting(meeting.id)
+            
+            if success:
+                # Notify owners about cancellation
+                await notify_owners_about_cancellation(context, meeting, user)
+                
+                await query.answer("✅ Встреча успешно отменена")
+                # Refresh the meetings list
+                await show_my_meetings(update, context)
+            else:
+                await query.answer("❌ Ошибка при отмене встречи")
+                
+    except Exception as e:
+        logger.error(f"Error cancelling meeting: {e}")
+        await update.callback_query.answer("❌ Ошибка при отмене встречи")
+
+async def notify_owners_about_cancellation(context: ContextTypes.DEFAULT_TYPE, meeting, manager: User):
+    """Notify owners about meeting cancellation."""
+    try:
+        from services.owner_service import OwnerService
+        
+        owners = OwnerService.get_all_owners()
+        if not owners:
+            return
+        
+        formatted_date = meeting.scheduled_time.strftime('%d.%m.%Y')
+        formatted_time = meeting.scheduled_time.strftime('%H:%M')
+        
+        message = f"""🚫 ВСТРЕЧА ОТМЕНЕНА!
+
+📅 {formatted_date} в {formatted_time}
+👤 {manager.first_name} {manager.last_name}
+🏢 {manager.department.value}
+
+ID встречи: {meeting.id}"""
+        
+        for owner in owners:
+            if owner.telegram_id:
+                try:
+                    await context.bot.send_message(
+                        chat_id=owner.telegram_id,
+                        text=message
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to notify owner {owner.id}: {e}")
+                    
+    except Exception as e:
+        logger.error(f"Error notifying owners about cancellation: {e}")
+
+@require_registration
+async def show_manager_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show manager main menu."""
+    try:
+        keyboard = [
+            [InlineKeyboardButton("📅 Запланировать встречу", callback_data="schedule_meeting")],
+            [InlineKeyboardButton("🗓 Мои встречи", callback_data="my_meetings")],
+        ]
+        
+        text = f"👨‍💼 МЕНЮ МЕНЕДЖЕРА\n\n👤 Выберите действие:"
+        
+        await update.callback_query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    except Exception as e:
+        logger.error(f"Error showing manager menu: {e}")
+        await update.callback_query.answer("❌ Ошибка при загрузке меню")
+
 async def book_meeting_slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Book a specific meeting slot."""
     query = update.callback_query
@@ -290,7 +460,7 @@ async def book_meeting_slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.edit_message_text("❌ Пользователь не найден.")
                 return
             
-            meeting_service = MeetingService(db)
+            # Use global meeting_service instance
             
             # Parse meeting datetime
             meeting_date = datetime.strptime(date_str, '%Y-%m-%d')
@@ -385,4 +555,8 @@ def get_manager_handlers():
         CallbackQueryHandler(show_day_slots, pattern=r'^date_\d{4}-\d{2}-\d{2}$'),
         CallbackQueryHandler(back_to_dates, pattern='^back_to_dates$'),
         CallbackQueryHandler(book_meeting_slot, pattern=r'^book_\d{4}-\d{2}-\d{2}_\d{2}:\d{2}$'),
+        CallbackQueryHandler(show_my_meetings, pattern='^my_meetings$'),
+        CallbackQueryHandler(show_manager_menu, pattern='^manager_menu$'),
+        CallbackQueryHandler(cancel_meeting_callback, pattern=r'^cancel_meeting_\d+$'),
+        CallbackQueryHandler(lambda u, c: show_available_slots(u, c), pattern='^schedule_meeting$'),
     ]
