@@ -117,13 +117,15 @@ def main():
     # Run the bot
     try:
         if settings.webhook_url:
+            webhook_full_url = f"{settings.webhook_url}{settings.webhook_path}"
             logger.info(f"🌐 Starting webhook mode on port {settings.port}")
+            logger.info(f"🔗 Webhook URL: {webhook_full_url}")
             # Webhook mode for production
             application.run_webhook(
                 listen="0.0.0.0",
                 port=settings.port,
                 url_path=settings.webhook_path,
-                webhook_url=f"{settings.webhook_url}{settings.webhook_path}",
+                webhook_url=webhook_full_url,
                 allowed_updates=Update.ALL_TYPES,
             )
         else:
@@ -132,7 +134,10 @@ def main():
             application.run_polling(allowed_updates=Update.ALL_TYPES)
     except Exception as e:
         logger.error(f"❌ Bot startup failed: {e}")
-        scheduler.shutdown()
+        try:
+            scheduler.shutdown()
+        except Exception as shutdown_error:
+            logger.error(f"❌ Scheduler shutdown error: {shutdown_error}")
         raise
 
 if __name__ == '__main__':

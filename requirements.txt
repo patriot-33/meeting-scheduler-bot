@@ -1,5 +1,5 @@
 # Core dependencies
-python-telegram-bot==20.7
+python-telegram-bot[webhooks]==20.7
 psycopg2-binary==2.9.9
 SQLAlchemy==2.0.23
 alembic==1.13.1
