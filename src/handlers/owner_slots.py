@@ -96,13 +96,16 @@ async def add_slot_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = "❌ Ошибка при добавлении слота или слот уже существует"
     
     keyboard = [
-        [InlineKeyboardButton("➕ Добавить еще слот", callback_data=f"add_slot_day_{day_index}")],
+        [InlineKeyboardButton("➕ Добавить еще слот", callback_data="add_more_slot_same_day")],
         [InlineKeyboardButton("← К управлению слотами", callback_data="owner_availability")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await query.edit_message_text(text, reply_markup=reply_markup)
-    return ConversationHandler.END
+    
+    # Не завершаем conversation, чтобы кнопка "Добавить еще слот" работала
+    # Остаемся в состоянии ADD_SLOT_TIME для обработки следующего выбора
+    return ADD_SLOT_TIME
 
 @require_owner
 async def remove_slot_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -346,9 +349,62 @@ async def save_day_setup(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(text, reply_markup=reply_markup)
     return ConversationHandler.END
 
-# Обработчики для слотов (заглушки для несуществующих данных)
+# Обработчики для слотов
 async def handle_slot_exists(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка нажатия на уже существующий слот"""
     query = update.callback_query
     await query.answer("💡 Этот слот уже добавлен", show_alert=False)
     return ADD_SLOT_TIME  # Остаемся в том же состоянии
+
+async def add_more_slot_same_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Добавить еще один слот для того же дня"""
+    query = update.callback_query
+    day_index = context.user_data.get('slot_day')
+    
+    if day_index is None:
+        await query.edit_message_text("❌ Ошибка: день не найден")
+        return ConversationHandler.END
+    
+    # Показываем доступные временные слоты снова
+    # Получаем уже занятые слоты пользователя
+    user = OwnerService.get_owner_by_telegram_id(update.effective_user.id)
+    existing_slots = OwnerService.get_owner_time_slots(user.id, day_index)
+    
+    # Создаем клавиатуру с доступными слотами
+    keyboard = []
+    row = []
+    for i, slot in enumerate(AVAILABLE_TIME_SLOTS):
+        if slot in existing_slots:
+            button_text = f"✅ {slot}"  # Уже добавлен
+            callback_data = f"slot_exists_{slot.replace(':', '')}"
+        else:
+            button_text = slot
+            callback_data = f"add_slot_time_{slot.replace(':', '')}"
+        
+        row.append(InlineKeyboardButton(button_text, callback_data=callback_data))
+        
+        # По 3 кнопки в ряд
+        if len(row) == 3:
+            keyboard.append(row)
+            row = []
+    
+    if row:  # Добавляем оставшиеся кнопки
+        keyboard.append(row)
+    
+    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="owner_availability")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    day_name = WEEKDAYS[day_index]
+    existing_text = f"Уже добавлены: {', '.join(existing_slots)}" if existing_slots else "Слоты не настроены"
+    
+    text = f"""
+⏰ <b>Добавление слота - {day_name}</b>
+
+{existing_text}
+
+Выберите время начала созвона:
+<i>✅ = уже добавлен, нажмите на свободное время</i>
+"""
+    
+    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='HTML')
+    return ADD_SLOT_TIME

@@ -456,8 +456,8 @@ def get_owner_conversation_handler():
     from src.handlers.owner_slots import (
         add_slot_day, add_slot_time, remove_slot_day, remove_slot_time,
         setup_day_select, toggle_slot, save_day_setup, handle_slot_exists,
-        ADD_SLOT_DAY, ADD_SLOT_TIME, REMOVE_SLOT_DAY, REMOVE_SLOT_TIME, 
-        SETUP_DAY, SETUP_SLOTS
+        add_more_slot_same_day, ADD_SLOT_DAY, ADD_SLOT_TIME, REMOVE_SLOT_DAY, 
+        REMOVE_SLOT_TIME, SETUP_DAY, SETUP_SLOTS
     )
     
     return ConversationHandler(
@@ -470,7 +470,8 @@ def get_owner_conversation_handler():
             ADD_SLOT_DAY: [CallbackQueryHandler(add_slot_day, pattern="^add_slot_day_")],
             ADD_SLOT_TIME: [
                 CallbackQueryHandler(add_slot_time, pattern="^add_slot_time_"),
-                CallbackQueryHandler(handle_slot_exists, pattern="^slot_exists_")
+                CallbackQueryHandler(handle_slot_exists, pattern="^slot_exists_"),
+                CallbackQueryHandler(add_more_slot_same_day, pattern="^add_more_slot_same_day$")
             ],
             REMOVE_SLOT_DAY: [CallbackQueryHandler(remove_slot_day, pattern="^remove_slot_day_")],
             REMOVE_SLOT_TIME: [
