@@ -225,20 +225,32 @@ class OwnerService:
     
     @staticmethod
     def are_both_owners_available(slot_datetime: datetime) -> bool:
-        """Проверить, свободны ли владельцы в указанное время (минимум 1 владелец для тестирования)"""
+        """BULLETPROOF: Проверить, свободны ли все необходимые владельцы в указанное время"""
+        from config import settings
+        
         owners = OwnerService.get_all_owners()
         if len(owners) < 1:
             logger.warning("⚠️ В системе нет владельцев")
             return False
         
-        if len(owners) < 2:
-            logger.info("ℹ️ В системе 1 владелец - режим тестирования")
-            # Проверяем единственного владельца
-            return OwnerService.is_owner_available_at_time(owners[0].id, slot_datetime)
+        expected_count = settings.expected_owners_count
+        actual_count = len(owners)
         
-        # Проверяем каждого владельца (берем первых двух)
-        for owner in owners[:2]:
-            if not OwnerService.is_owner_available_at_time(owner.id, slot_datetime):
+        # Bulletproof mode для одного владельца  
+        if actual_count == 1:
+            if settings.allow_single_owner_mode:
+                logger.info(f"ℹ️ BULLETPROOF режим: 1 владелец из {expected_count} ожидаемых - {owners[0].first_name}")
+                return OwnerService.is_owner_available_at_time(owners[0].id, slot_datetime)
+            else:
+                logger.warning(f"⚠️ Недостаточно владельцев: найден {actual_count}, ожидается {expected_count}, single-mode отключен")
+                return False
+        
+        # Проверяем нужное количество владельцев
+        owners_to_check = min(actual_count, expected_count, 2)  # Максимум 2 для совместимости
+        logger.info(f"ℹ️ Проверяем доступность {owners_to_check} владельцев из {actual_count} доступных")
+        
+        for i in range(owners_to_check):
+            if not OwnerService.is_owner_available_at_time(owners[i].id, slot_datetime):
                 return False
         
         return True
@@ -276,20 +288,39 @@ class OwnerService:
     
     @staticmethod
     def get_available_slots_for_both_owners(days_ahead: int = 14) -> Dict[str, List[str]]:
-        """NEW LOGIC: Get available slots when BOTH owners are free - checks intersections and both calendars."""
+        """BULLETPROOF LOGIC: Get available slots for all active owners (supports 1+ owners)."""
         available_slots = {}
         
         from services.google_calendar import google_calendar_service
         from database import get_db, User, UserRole
         
-        # Get exactly 2 owners with their calendar IDs
+        # Get all active owners with their calendar IDs
         with get_db() as db:
-            owners = db.query(User).filter(User.role == UserRole.OWNER).limit(2).all()
+            owners = db.query(User).filter(User.role == UserRole.OWNER).all()
             
-            if len(owners) < 2:
-                logger.warning(f"⚠️ Найдено только {len(owners)} владельцев вместо 2. Проверяем только доступных.")
-                return {}  # Надо 2 владельца
+            if len(owners) == 0:
+                logger.warning("⚠️ В системе нет владельцев.")
+                return {}
+            
+            # BULLETPROOF: Используем настройки из конфигурации
+            from config import settings
+            expected_count = settings.expected_owners_count
+            actual_count = len(owners)
+            
+            # Single owner bulletproof mode
+            if actual_count == 1:
+                if settings.allow_single_owner_mode:
+                    logger.info(f"ℹ️ BULLETPROOF режим: 1 владелец из {expected_count} ожидаемых - {owners[0].first_name}")
+                    return OwnerService._get_single_owner_slots(owners[0], days_ahead)
+                else:
+                    logger.warning(f"⚠️ Single-owner режим отключен, но найден только 1 владелец")
+                    return {}
+            
+            # Multi-owner mode - ищем пересечения слотов
+            owners_to_process = min(actual_count, 2)  # Максимум 2 для совместимости
+            logger.info(f"ℹ️ BULLETPROOF режим: обрабатываем {owners_to_process} владельцев из {actual_count}")
         
+        # Берем первых двух владельцев для совместимости с существующей логикой
         owner1, owner2 = owners[0], owners[1]
         
         # Генерируем слоты на указанное количество дней вперед
@@ -361,6 +392,65 @@ class OwnerService:
                 
                 # Добавляем слот только если оба календаря свободны
                 if both_calendars_free:
+                    final_slots.append(time_slot)
+            
+            if final_slots:
+                available_slots[date_str] = final_slots
+        
+        return available_slots
+    
+    @staticmethod
+    def _get_single_owner_slots(owner: User, days_ahead: int) -> Dict[str, List[str]]:
+        """Get available slots for a single owner (bulletproof mode for 1 owner)."""
+        available_slots = {}
+        
+        # Генерируем слоты на указанное количество дней вперед
+        for day_offset in range(1, days_ahead + 1):
+            check_date = datetime.now() + timedelta(days=day_offset)
+            
+            # Проверяем только рабочие дни (пн-пт)
+            if check_date.weekday() >= 5:  # Суббота=5, Воскресенье=6
+                continue
+            
+            date_str = check_date.strftime('%Y-%m-%d')
+            day_of_week = check_date.weekday()  # 0=понедельник
+            
+            # Получаем локальные слоты владельца
+            owner_slots = OwnerService.get_owner_time_slots(owner.id, day_of_week)
+            
+            if not owner_slots:
+                continue  # Нет слотов в локальной базе
+            
+            # Проверяем каждый слот
+            final_slots = []
+            
+            for time_slot in sorted(owner_slots):
+                slot_datetime = datetime.combine(
+                    check_date.date(),
+                    datetime.strptime(time_slot, "%H:%M").time()
+                )
+                
+                # Проверить блокировки владельца
+                if not OwnerService.is_owner_available_at_time(owner.id, slot_datetime):
+                    continue
+                
+                # Проверить Google Calendar владельца
+                calendar_free = True
+                
+                if owner.google_calendar_id:
+                    is_free = OwnerService._check_google_calendar_slot(owner.google_calendar_id, slot_datetime)
+                    if is_free is False:
+                        calendar_free = False
+                    elif is_free is None:
+                        logger.error(f"❌ Google Calendar недоступен для владельца {owner.first_name} - слот {time_slot} блокируется")
+                        calendar_free = False  # Консервативный подход
+                else:
+                    logger.warning(f"⚠️ Владелец {owner.first_name} не подключил Google Calendar")
+                    # В режиме одного владельца разрешаем работу без календаря
+                    calendar_free = True
+                
+                # Добавляем слот если календарь свободен
+                if calendar_free:
                     final_slots.append(time_slot)
             
             if final_slots:

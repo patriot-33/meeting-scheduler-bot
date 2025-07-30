@@ -100,6 +100,18 @@ class Settings(BaseSettings):
         description="Reminder intervals in days before meeting"
     )
     
+    # Owner management - BULLETPROOF configuration
+    expected_owners_count: int = Field(
+        default=1, 
+        env="EXPECTED_OWNERS_COUNT",
+        description="Expected number of owners (1 for single-owner mode, 2+ for multi-owner mode)"
+    )
+    allow_single_owner_mode: bool = Field(
+        default=True,
+        env="ALLOW_SINGLE_OWNER_MODE", 
+        description="Allow system to work with only 1 owner (bulletproof mode)"
+    )
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
@@ -259,6 +271,20 @@ def validate_configuration() -> tuple[bool, list[str]]:
         if settings.use_webhook and not settings.webhook_url:
             errors.append("WEBHOOK_URL is required in production")
     
+    # Owner configuration validation (BULLETPROOF)
+    admin_count = len(settings.admin_ids_list)
+    expected_count = settings.expected_owners_count
+    
+    if admin_count == 0:
+        errors.append("No admin IDs configured - at least 1 owner is required")
+    elif admin_count < expected_count:
+        if not settings.allow_single_owner_mode and admin_count == 1:
+            errors.append(f"Expected {expected_count} owners but found {admin_count}, and single owner mode is disabled")
+        elif admin_count == 1 and expected_count > 1:
+            print(f"⚠️ Warning: Expected {expected_count} owners but found {admin_count}. Running in single-owner bulletproof mode.")
+        else:
+            print(f"⚠️ Warning: Expected {expected_count} owners but found {admin_count}. System will adapt automatically.")
+    
     return len(errors) == 0, errors
 
 
@@ -284,6 +310,11 @@ def print_configuration_summary():
     print(f"  Meeting duration: {settings.meeting_duration_minutes} minutes")
     print(f"  Available slots: {settings.available_slots}")
     print(f"  Reminder intervals: {settings.reminder_intervals} days")
+    
+    print("\nOwner Management (BULLETPROOF):")
+    print(f"  Expected owners count: {settings.expected_owners_count}")
+    print(f"  Allow single owner mode: {settings.allow_single_owner_mode}")
+    print(f"  Current admin IDs configured: {len(settings.admin_ids_list)}")
     
     print("\nValidation:")
     is_valid, validation_errors = validate_configuration()
