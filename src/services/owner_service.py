@@ -55,11 +55,11 @@ class OwnerService:
             ).order_by(OwnerAvailability.day_of_week).all()
     
     @staticmethod
-    def set_owner_availability(owner_id: int, day_of_week: int, start_time: str, end_time: str) -> bool:
-        """Установить доступность владельца на конкретный день"""
+    def set_owner_time_slots(owner_id: int, day_of_week: int, time_slots: list) -> bool:
+        """Установить временные слоты владельца на конкретный день"""
         try:
             with get_db() as db:
-                # Удаляем старую доступность для этого дня
+                # Удаляем старые слоты для этого дня
                 db.query(OwnerAvailability).filter(
                     and_(
                         OwnerAvailability.owner_id == owner_id,
@@ -67,30 +67,93 @@ class OwnerService:
                     )
                 ).delete()
                 
-                # Добавляем новую доступность
+                # Добавляем новые слоты
+                for time_slot in time_slots:
+                    availability = OwnerAvailability(
+                        owner_id=owner_id,
+                        day_of_week=day_of_week,
+                        time_slot=time_slot,
+                        is_active=True
+                    )
+                    db.add(availability)
+                
+                db.commit()
+                
+                slots_str = ", ".join(time_slots)
+                logger.info(f"✅ Установлены временные слоты для владельца {owner_id}: {WEEKDAYS[day_of_week]} - {slots_str}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка установки временных слотов: {e}")
+            return False
+    
+    @staticmethod
+    def add_owner_time_slot(owner_id: int, day_of_week: int, time_slot: str) -> bool:
+        """Добавить один временной слот владельцу на конкретный день"""
+        try:
+            with get_db() as db:
+                # Проверяем, не существует ли уже такой слот
+                existing = db.query(OwnerAvailability).filter(
+                    and_(
+                        OwnerAvailability.owner_id == owner_id,
+                        OwnerAvailability.day_of_week == day_of_week,
+                        OwnerAvailability.time_slot == time_slot,
+                        OwnerAvailability.is_active == True
+                    )
+                ).first()
+                
+                if existing:
+                    logger.info(f"⚠️ Слот {time_slot} уже существует для {WEEKDAYS[day_of_week]}")
+                    return False
+                
+                # Добавляем новый слот
                 availability = OwnerAvailability(
                     owner_id=owner_id,
                     day_of_week=day_of_week,
-                    start_time=start_time,
-                    end_time=end_time,
+                    time_slot=time_slot,
                     is_active=True
                 )
                 db.add(availability)
                 db.commit()
                 
-                logger.info(f"✅ Установлена доступность для владельца {owner_id}: {WEEKDAYS[day_of_week]} {start_time}-{end_time}")
+                logger.info(f"✅ Добавлен слот для владельца {owner_id}: {WEEKDAYS[day_of_week]} {time_slot}")
                 return True
                 
         except Exception as e:
-            logger.error(f"❌ Ошибка установки доступности: {e}")
+            logger.error(f"❌ Ошибка добавления слота: {e}")
             return False
     
     @staticmethod
-    def remove_owner_availability(owner_id: int, day_of_week: int) -> bool:
-        """Удалить доступность владельца на конкретный день"""
+    def remove_owner_time_slot(owner_id: int, day_of_week: int, time_slot: str) -> bool:
+        """Удалить конкретный временной слот владельца"""
         try:
             with get_db() as db:
-                db.query(OwnerAvailability).filter(
+                deleted = db.query(OwnerAvailability).filter(
+                    and_(
+                        OwnerAvailability.owner_id == owner_id,
+                        OwnerAvailability.day_of_week == day_of_week,
+                        OwnerAvailability.time_slot == time_slot
+                    )
+                ).delete()
+                db.commit()
+                
+                if deleted:
+                    logger.info(f"✅ Удален слот для владельца {owner_id}: {WEEKDAYS[day_of_week]} {time_slot}")
+                    return True
+                else:
+                    logger.info(f"⚠️ Слот {time_slot} не найден для {WEEKDAYS[day_of_week]}")
+                    return False
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка удаления слота: {e}")
+            return False
+    
+    @staticmethod
+    def remove_all_day_slots(owner_id: int, day_of_week: int) -> bool:
+        """Удалить все временные слоты владельца на конкретный день"""
+        try:
+            with get_db() as db:
+                deleted = db.query(OwnerAvailability).filter(
                     and_(
                         OwnerAvailability.owner_id == owner_id,
                         OwnerAvailability.day_of_week == day_of_week
@@ -98,12 +161,31 @@ class OwnerService:
                 ).delete()
                 db.commit()
                 
-                logger.info(f"✅ Удалена доступность для владельца {owner_id}: {WEEKDAYS[day_of_week]}")
+                logger.info(f"✅ Удалены все слоты для владельца {owner_id}: {WEEKDAYS[day_of_week]} (удалено: {deleted})")
                 return True
                 
         except Exception as e:
-            logger.error(f"❌ Ошибка удаления доступности: {e}")
+            logger.error(f"❌ Ошибка удаления слотов дня: {e}")
             return False
+    
+    @staticmethod
+    def get_owner_time_slots(owner_id: int, day_of_week: int) -> List[str]:
+        """Получить все временные слоты владельца на конкретный день"""
+        try:
+            with get_db() as db:
+                slots = db.query(OwnerAvailability.time_slot).filter(
+                    and_(
+                        OwnerAvailability.owner_id == owner_id,
+                        OwnerAvailability.day_of_week == day_of_week,
+                        OwnerAvailability.is_active == True
+                    )
+                ).order_by(OwnerAvailability.time_slot).all()
+                
+                return [slot[0] for slot in slots]
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения слотов: {e}")
+            return []
     
     @staticmethod
     def block_owner_time(owner_id: int, blocked_from: datetime, blocked_to: datetime, reason: str = "") -> bool:
@@ -160,26 +242,20 @@ class OwnerService:
     def is_owner_available_at_time(owner_id: int, slot_datetime: datetime) -> bool:
         """Проверить, доступен ли владелец в конкретное время"""
         day_of_week = slot_datetime.weekday()  # 0=Monday, 6=Sunday
-        slot_time = slot_datetime.time()
+        slot_time_str = slot_datetime.strftime("%H:%M")
         
-        # Проверяем общую доступность по дням недели
+        # Проверяем, есть ли у владельца такой временной слот
         with get_db() as db:
-            availability = db.query(OwnerAvailability).filter(
+            time_slot = db.query(OwnerAvailability).filter(
                 and_(
                     OwnerAvailability.owner_id == owner_id,
                     OwnerAvailability.day_of_week == day_of_week,
+                    OwnerAvailability.time_slot == slot_time_str,
                     OwnerAvailability.is_active == True
                 )
             ).first()
             
-            if not availability:
-                return False
-            
-            # Проверяем, входит ли время в рабочие часы
-            start_time = datetime.strptime(availability.start_time, "%H:%M").time()
-            end_time = datetime.strptime(availability.end_time, "%H:%M").time()
-            
-            if not (start_time <= slot_time <= end_time):
+            if not time_slot:
                 return False
             
             # Проверяем заблокированное время
@@ -220,16 +296,18 @@ class OwnerService:
     
     @staticmethod
     def format_availability_text(owner_id: int) -> str:
-        """Форматировать текст доступности владельца"""
-        availability = OwnerService.get_owner_availability(owner_id)
+        """Форматировать текст доступности владельца по слотам"""
+        text = "📅 Ваши временные слоты:\n\n"
+        has_slots = False
         
-        if not availability:
-            return "❌ Доступность не настроена"
+        for day_index, day_name in enumerate(WEEKDAYS):
+            slots = OwnerService.get_owner_time_slots(owner_id, day_index)
+            if slots:
+                has_slots = True
+                slots_text = ", ".join(slots)
+                text += f"• <b>{day_name}</b>: {slots_text}\n"
         
-        text = "📅 Ваша текущая доступность:\n\n"
-        
-        for avail in availability:
-            day_name = WEEKDAYS[avail.day_of_week]
-            text += f"• {day_name}: {avail.start_time} - {avail.end_time}\n"
+        if not has_slots:
+            return "❌ Временные слоты не настроены\n\n💡 Добавьте слоты для начала приема встреч"
         
         return text

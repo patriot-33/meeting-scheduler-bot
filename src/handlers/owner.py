@@ -14,8 +14,8 @@ from src.config import settings
 logger = logging.getLogger(__name__)
 
 # States для conversation handlers
-(SET_AVAILABILITY_DAY, SET_AVAILABILITY_START, SET_AVAILABILITY_END,
- BLOCK_TIME_START, BLOCK_TIME_END, BLOCK_TIME_REASON) = range(6)
+(ADD_SLOT_DAY, ADD_SLOT_TIME, REMOVE_SLOT_DAY, REMOVE_SLOT_TIME, 
+ SETUP_DAY, SETUP_SLOTS, BLOCK_TIME_START, BLOCK_TIME_END, BLOCK_TIME_REASON) = range(9)
 
 @require_owner
 async def owner_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -48,43 +48,89 @@ async def owner_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @require_owner
 async def show_availability_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показать меню управления доступностью"""
+    """Показать меню управления временными слотами"""
     user = OwnerService.get_owner_by_telegram_id(update.effective_user.id)
     availability_text = OwnerService.format_availability_text(user.id)
     
     keyboard = [
-        [InlineKeyboardButton("➕ Добавить доступный день", callback_data="owner_add_day")],
-        [InlineKeyboardButton("❌ Удалить день", callback_data="owner_remove_day")],
+        [InlineKeyboardButton("➕ Добавить слот", callback_data="owner_add_slot")],
+        [InlineKeyboardButton("❌ Удалить слот", callback_data="owner_remove_slot")],
+        [InlineKeyboardButton("📝 Настроить день полностью", callback_data="owner_setup_day")],
         [InlineKeyboardButton("🔄 Обновить расписание", callback_data="owner_availability")],
         [InlineKeyboardButton("← Назад", callback_data="owner_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     text = f"""
-📅 <b>Управление доступностью</b>
+📅 <b>Управление временными слотами</b>
 
 {availability_text}
 
-<i>Встречи возможны только когда свободны оба владельца</i>
+<i>💡 Каждый слот = 1 час созвона
+Встречи возможны только когда свободны оба владельца</i>
 """
     
     await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode='HTML')
 
-async def start_set_availability(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Начать процесс установки доступности"""
+async def start_add_slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начать процесс добавления слота"""
     keyboard = []
     
     # Показываем дни недели
     for i, day in enumerate(WEEKDAYS):
-        keyboard.append([InlineKeyboardButton(day, callback_data=f"set_day_{i}")])
+        keyboard.append([InlineKeyboardButton(day, callback_data=f"add_slot_day_{i}")])
     
     keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="owner_availability")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    text = "📅 Выберите день недели для настройки доступности:"
+    text = "📅 Выберите день недели для добавления слота:"
     
     await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
-    return SET_AVAILABILITY_DAY
+    return ADD_SLOT_DAY
+
+async def start_remove_slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начать процесс удаления слота"""
+    user = OwnerService.get_owner_by_telegram_id(update.effective_user.id)
+    keyboard = []
+    
+    # Показываем только дни, где есть слоты
+    for i, day in enumerate(WEEKDAYS):
+        slots = OwnerService.get_owner_time_slots(user.id, i)
+        if slots:
+            keyboard.append([InlineKeyboardButton(f"{day} ({', '.join(slots)})", callback_data=f"remove_slot_day_{i}")])
+    
+    if not keyboard:
+        await update.callback_query.edit_message_text(
+            "❌ У вас нет настроенных слотов для удаления.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Назад", callback_data="owner_availability")]])
+        )
+        return ConversationHandler.END
+    
+    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="owner_availability")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.callback_query.edit_message_text(
+        "📅 Выберите день для удаления слота:",
+        reply_markup=reply_markup
+    )
+    return REMOVE_SLOT_DAY
+
+async def start_setup_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начать процесс полной настройки дня"""
+    keyboard = []
+    
+    # Показываем дни недели
+    for i, day in enumerate(WEEKDAYS):
+        keyboard.append([InlineKeyboardButton(day, callback_data=f"setup_day_{i}")])
+    
+    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="owner_availability")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.callback_query.edit_message_text(
+        "📅 Выберите день для полной настройки слотов:",
+        reply_markup=reply_markup
+    )
+    return SETUP_DAY
 
 async def set_availability_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Установить день доступности"""
@@ -407,12 +453,35 @@ async def handle_owner_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
 def get_owner_conversation_handler():
     """Получить conversation handler для владельцев"""
+    from src.handlers.owner_slots import (
+        add_slot_day, add_slot_time, remove_slot_day, remove_slot_time,
+        setup_day_select, toggle_slot, save_day_setup, handle_slot_exists,
+        ADD_SLOT_DAY, ADD_SLOT_TIME, REMOVE_SLOT_DAY, REMOVE_SLOT_TIME, 
+        SETUP_DAY, SETUP_SLOTS
+    )
+    
     return ConversationHandler(
-        entry_points=[CallbackQueryHandler(start_set_availability, pattern="^owner_add_day$")],
+        entry_points=[
+            CallbackQueryHandler(start_add_slot, pattern="^owner_add_slot$"),
+            CallbackQueryHandler(start_remove_slot, pattern="^owner_remove_slot$"),
+            CallbackQueryHandler(start_setup_day, pattern="^owner_setup_day$")
+        ],
         states={
-            SET_AVAILABILITY_DAY: [CallbackQueryHandler(set_availability_day, pattern="^set_day_")],
-            SET_AVAILABILITY_START: [CallbackQueryHandler(set_availability_start, pattern="^start_time_")],
-            SET_AVAILABILITY_END: [CallbackQueryHandler(set_availability_end, pattern="^end_time_")]
+            ADD_SLOT_DAY: [CallbackQueryHandler(add_slot_day, pattern="^add_slot_day_")],
+            ADD_SLOT_TIME: [
+                CallbackQueryHandler(add_slot_time, pattern="^add_slot_time_"),
+                CallbackQueryHandler(handle_slot_exists, pattern="^slot_exists_")
+            ],
+            REMOVE_SLOT_DAY: [CallbackQueryHandler(remove_slot_day, pattern="^remove_slot_day_")],
+            REMOVE_SLOT_TIME: [
+                CallbackQueryHandler(remove_slot_time, pattern="^remove_slot_time_"),
+                CallbackQueryHandler(remove_slot_time, pattern="^remove_all_day_slots$")
+            ],
+            SETUP_DAY: [CallbackQueryHandler(setup_day_select, pattern="^setup_day_")],
+            SETUP_SLOTS: [
+                CallbackQueryHandler(toggle_slot, pattern="^toggle_slot_"),
+                CallbackQueryHandler(save_day_setup, pattern="^save_day_setup$")
+            ]
         },
         fallbacks=[CallbackQueryHandler(show_availability_menu, pattern="^owner_availability$")],
         per_message=True

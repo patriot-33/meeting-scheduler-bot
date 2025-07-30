@@ -86,14 +86,13 @@ class Reminder(Base):
     user = relationship("User", back_populates="reminders")
 
 class OwnerAvailability(Base):
-    """Доступные дни недели и часы для владельцев"""
+    """Доступные временные слоты для владельцев по дням недели"""
     __tablename__ = "owner_availability"
     
     id = Column(Integer, primary_key=True)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     day_of_week = Column(Integer, nullable=False)  # 0=Monday, 6=Sunday
-    start_time = Column(String(5), nullable=False)  # "09:00"
-    end_time = Column(String(5), nullable=False)    # "18:00"
+    time_slot = Column(String(5), nullable=False)  # "11:00", "14:00", "15:00" etc.
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())

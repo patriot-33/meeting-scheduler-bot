@@ -36,6 +36,8 @@ def hotfix_enum_database():
                 conn.execute(text("DROP TABLE IF EXISTS meetings CASCADE;"))
                 conn.execute(text("DROP TABLE IF EXISTS users CASCADE;"))
                 
+                logger.info("📊 Recreating database schema with new slot-based availability model")
+                
                 # Drop all enum types
                 logger.info("Dropping all enum types...")
                 conn.execute(text("DROP TYPE IF EXISTS userrole CASCADE;"))
