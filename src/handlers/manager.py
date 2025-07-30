@@ -5,8 +5,8 @@ import logging
 from sqlalchemy import and_
 
 from src.database import get_db, User, Meeting, UserRole, UserStatus, MeetingStatus, Reminder
-from src.services.google_calendar import GoogleCalendarService
-from src.services.reminder_service import ReminderService
+from src.services.meeting_service import MeetingService
+from src.services.owner_service import OwnerService
 from src.config import settings
 from src.utils.decorators import require_registration
 
@@ -14,12 +14,18 @@ logger = logging.getLogger(__name__)
 
 @require_registration
 async def show_available_slots(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show available meeting slots."""
+    """Show available meeting slots when both owners are free."""
     user_id = update.effective_user.id
     
     with get_db() as db:
         user = db.query(User).filter(User.telegram_id == user_id).first()
         
+        if user.role != UserRole.MANAGER:
+            await update.message.reply_text(
+                "❌ Данная функция доступна только руководителям отделов."
+            )
+            return
+            
         if user.status != UserStatus.ACTIVE:
             status_text = {
                 UserStatus.VACATION: "В отпуске",
@@ -28,26 +34,23 @@ async def show_available_slots(update: Update, context: ContextTypes.DEFAULT_TYP
             }.get(user.status, "неактивном статусе")
             
             await update.message.reply_text(
-                f"Вы находитесь на {status_text}.\n\n"
+                f"❌ Вы находитесь в статусе: {status_text}.\n\n"
                 f"Для назначения встреч сначала вернитесь в активный статус: /active"
             )
             return
     
     try:
-        calendar_service = GoogleCalendarService()
-        
-        # Get available slots for the next 4 weeks
-        start_date = datetime.now().date()
-        end_date = start_date + timedelta(days=28)
-        
-        available_slots = calendar_service.get_available_slots(
-            datetime.combine(start_date, datetime.min.time()),
-            datetime.combine(end_date, datetime.min.time())
-        )
-        
-        if not any(slots for slots in available_slots.values()):
-            await update.message.reply_text(
-                "К сожалению, на ближайшие 4 недели нет свободных слотов.\n\n"
+        with get_db() as db:
+            meeting_service = MeetingService(db)
+            
+            # Get available slots when both owners are free
+            available_slots = meeting_service.get_available_slots(days_ahead=14)
+            
+            if not available_slots:
+                await update.message.reply_text(
+                    "❌ К сожалению, на ближайшие 2 недели нет свободных слотов.\n\n"
+                    "🕐 Слоты доступны только когда свободны оба владельца бизнеса.\n"
+                    "📞 Обратитесь к владельцам для уточнения их расписания."
                 "Попробуйте позже или свяжитесь с администратором."
             )
             return

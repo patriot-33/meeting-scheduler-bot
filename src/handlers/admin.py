@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import logging
 from sqlalchemy import and_
 
-from src.database import get_db, User, Meeting, UserRole, UserStatus, MeetingStatus
+from src.database import get_db, User, Meeting, UserRole, UserStatus, MeetingStatus, Department
 from src.config import settings
 from src.utils.decorators import require_admin
 
@@ -36,7 +36,7 @@ async def show_pending_users(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         for user in pending_users:
             message_text += f"• {user.first_name} {user.last_name}\n"
-            message_text += f"  Отдел: {user.department}\n"
+            message_text += f"  Отдел: {user.department.value}\n"
             message_text += f"  ID: {user.telegram_id}\n\n"
         
         keyboard = []
@@ -67,18 +67,18 @@ async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         managers = []
         
         for user in users:
-            user_info = f"• {user.first_name} {user.last_name} ({user.department})"
-            if user.role == UserRole.ADMIN:
+            user_info = f"• {user.first_name} {user.last_name} ({user.department.value})"
+            if user.role == UserRole.OWNER:
                 admins.append(user_info)
             else:
                 managers.append(user_info)
         
         if admins:
-            message_text += "👨‍💼 **Администраторы:**\n"
+            message_text += "👑 **Владельцы бизнеса:**\n"
             message_text += "\n".join(admins) + "\n\n"
         
         if managers:
-            message_text += "👥 **Менеджеры:**\n"
+            message_text += "👥 **Руководители отделов:**\n"
             message_text += "\n".join(managers)
         
         await update.message.reply_text(message_text, parse_mode='Markdown')
@@ -182,14 +182,16 @@ async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE, user_
         try:
             await context.bot.send_message(
                 chat_id=user.telegram_id,
-                text="🎉 Поздравляем! Ваша регистрация одобрена.\n\n"
-                     "Теперь вы можете планировать встречи через команду /schedule"
+                text="🎉 Поздравляем! Ваша регистрация одобрена владельцем бизнеса!\n\n"
+                     f"👑 Вы теперь руководитель отдела: {user.department.value}\n"
+                     "📅 Используйте /schedule для назначения встреч с владельцами"
             )
         except Exception as e:
             logger.error(f"Failed to notify approved user {user.id}: {e}")
         
         await update.callback_query.edit_message_text(
-            f"✅ Пользователь {user.first_name} {user.last_name} одобрен!"
+            f"✅ Руководитель {user.first_name} {user.last_name} одобрен!\n"
+            f"🏢 Отдел: {user.department.value}"
         )
 
 async def reject_user(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int) -> None:
@@ -215,7 +217,8 @@ async def reject_user(update: Update, context: ContextTypes.DEFAULT_TYPE, user_i
         db.commit()
         
         await update.callback_query.edit_message_text(
-            f"❌ Пользователь {user.first_name} {user.last_name} отклонен и удален."
+            f"❌ Заявка {user.first_name} {user.last_name} отклонена.\n"
+            f"🏢 Отдел: {user.department.value}"
         )
 
 async def handle_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

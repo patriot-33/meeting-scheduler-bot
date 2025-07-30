@@ -12,7 +12,7 @@ from telegram.ext import (
 
 from src.config import settings
 from src.database import init_db
-from src.handlers import registration, admin, manager, common
+from src.handlers import registration, admin, manager, common, owner
 from src.services.reminder_service import ReminderService
 from src.utils.scheduler import setup_scheduler
 
@@ -87,6 +87,10 @@ def main():
     application.add_handler(CommandHandler("broadcast", admin.broadcast_message))
     application.add_handler(CommandHandler("notifications", admin.toggle_notifications))
     
+    # Owner commands
+    application.add_handler(CommandHandler("owner", owner.owner_menu))
+    application.add_handler(owner.get_owner_conversation_handler())
+    
     # Manager commands
     application.add_handler(CommandHandler("schedule", manager.show_available_slots))
     application.add_handler(CommandHandler("my_meetings", manager.show_my_meetings))
@@ -98,6 +102,7 @@ def main():
     
     # Callback query handlers
     application.add_handler(CallbackQueryHandler(admin.handle_admin_callback, pattern="^admin_"))
+    application.add_handler(CallbackQueryHandler(owner.handle_owner_callback, pattern="^owner_"))
     application.add_handler(CallbackQueryHandler(manager.handle_booking_callback, pattern="^book_"))
     application.add_handler(CallbackQueryHandler(manager.handle_cancel_callback, pattern="^cancel_"))
     application.add_handler(CallbackQueryHandler(common.handle_navigation_callback, pattern="^nav_"))

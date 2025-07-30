@@ -6,6 +6,7 @@ from typing import List, Optional
 from src.database import Meeting, User, MeetingStatus, UserStatus, UserRole
 from src.services.google_calendar import GoogleCalendarService
 from src.services.reminder_service import ReminderService
+from src.services.owner_service import OwnerService
 
 class MeetingService:
     def __init__(self, db: Session):
@@ -21,11 +22,15 @@ class MeetingService:
             if not manager:
                 return None
             
+            # Check if both owners are available at this time
+            if not OwnerService.are_both_owners_available(scheduled_time):
+                raise ValueError("One or both owners are not available at this time")
+            
             # Create meeting in Google Calendar
             time_str = scheduled_time.strftime('%H:%M')
             event_id, meet_link = self.calendar_service.create_meeting(
                 f"{manager.first_name} {manager.last_name}",
-                manager.department,
+                manager.department.value,
                 scheduled_time,
                 time_str
             )
@@ -97,6 +102,26 @@ class MeetingService:
             self.db.commit()
             return True
         return False
+    
+    def get_available_slots(self, days_ahead: int = 14) -> List[datetime]:
+        """Get available meeting slots when both owners are free."""
+        return OwnerService.get_available_slots_for_both_owners(days_ahead)
+    
+    def is_slot_available(self, slot_datetime: datetime) -> bool:
+        """Check if a specific slot is available for booking."""
+        # Check if both owners are available
+        if not OwnerService.are_both_owners_available(slot_datetime):
+            return False
+        
+        # Check if slot is not already booked
+        existing_meeting = self.db.query(Meeting).filter(
+            and_(
+                Meeting.scheduled_time == slot_datetime,
+                Meeting.status == MeetingStatus.SCHEDULED
+            )
+        ).first()
+        
+        return existing_meeting is None
     
     def get_overdue_users(self, days_overdue: int = 17) -> List[User]:
         """Get users who haven't scheduled meetings in specified days."""

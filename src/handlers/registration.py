@@ -9,7 +9,7 @@ from telegram.ext import (
 )
 import logging
 
-from src.database import get_db, User, UserRole
+from src.database import get_db, User, UserRole, Department
 from src.config import settings
 
 logger = logging.getLogger(__name__)
@@ -17,17 +17,15 @@ logger = logging.getLogger(__name__)
 # Conversation states
 FIRST_NAME, LAST_NAME, DEPARTMENT = range(3)
 
-# Departments list
+# Departments list - 7 отделов согласно требованиям
 DEPARTMENTS = [
-    "Продажи",
-    "Маркетинг",
-    "Разработка",
-    "IT",
-    "HR",
-    "Финансы",
-    "Операции",
-    "Логистика",
-    "Поддержка",
+    (Department.FARM, "Фарм отдел"),
+    (Department.FINANCE, "Фин отдел"),
+    (Department.HR, "HR отдел"),
+    (Department.TECH, "Тех отдел"),
+    (Department.IT, "ИТ отдел"),
+    (Department.BIZDEV, "Биздев отдел"),
+    (Department.GAMEDEV, "Геймдев проект")
 ]
 
 async def start_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -41,18 +39,41 @@ async def start_registration(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if existing_user:
             if existing_user.role == UserRole.PENDING:
                 await update.message.reply_text(
-                    "⏳ Ваша заявка на регистрацию уже отправлена и ожидает одобрения администратором."
+                    "⏳ Ваша заявка на регистрацию уже отправлена и ожидает одобрения владельцем бизнеса."
                 )
-            elif existing_user.role in [UserRole.ADMIN, UserRole.MANAGER]:
+            elif existing_user.role in [UserRole.OWNER, UserRole.MANAGER]:
                 await update.message.reply_text(
-                    "Вы уже зарегистрированы! Используйте /help для просмотра доступных команд."
+                    "✅ Вы уже зарегистрированы! Используйте /help для просмотра доступных команд."
                 )
             return ConversationHandler.END
     
+    # Проверяем, является ли пользователь владельцем
+    if user_id in settings.admin_ids_list:
+        # Автоматически регистрируем владельца
+        with get_db() as db:
+            owner_user = User(
+                telegram_id=user_id,
+                telegram_username=update.effective_user.username,
+                first_name=update.effective_user.first_name or "Владелец",
+                last_name=update.effective_user.last_name or "Бизнеса",
+                department=Department.FINANCE,  # Условно назначаем фин отдел
+                role=UserRole.OWNER
+            )
+            db.add(owner_user)
+            db.commit()
+            
+        await update.message.reply_text(
+            "👑 Добро пожаловать, владелец!\n\n"
+            "Вы автоматически зарегистрированы как владелец бизнеса.\n"
+            "Используйте /owner для доступа к панели управления."
+        )
+        return ConversationHandler.END
+    
     await update.message.reply_text(
-        "Добро пожаловать!\n\n"
-        "Я бот для планирования встреч с руководителями отделов.\n\n"
-        "Для начала давайте познакомимся. Как вас зовут? Введите ваше имя:"
+        "👋 Добро пожаловать!\n\n"
+        "Я бот для планирования встреч с владельцами бизнеса.\n\n"
+        "📝 Для регистрации как руководитель отдела, давайте познакомимся.\n"
+        "Введите ваше имя:"
     )
     
     return FIRST_NAME
@@ -88,12 +109,8 @@ async def get_last_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Create department selection keyboard
     keyboard = []
-    for i in range(0, len(DEPARTMENTS), 2):
-        row = []
-        row.append(InlineKeyboardButton(DEPARTMENTS[i], callback_data=f"dept_{i}"))
-        if i + 1 < len(DEPARTMENTS):
-            row.append(InlineKeyboardButton(DEPARTMENTS[i + 1], callback_data=f"dept_{i + 1}"))
-        keyboard.append(row)
+    for i, (dept_enum, dept_name) in enumerate(DEPARTMENTS):
+        keyboard.append([InlineKeyboardButton(dept_name, callback_data=f"dept_{i}")])
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -111,7 +128,7 @@ async def get_department(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Parse department index
     dept_index = int(query.data.split('_')[1])
-    department = DEPARTMENTS[dept_index]
+    department_enum, department_name = DEPARTMENTS[dept_index]
     
     # Save to database
     user_id = update.effective_user.id
@@ -125,7 +142,7 @@ async def get_department(update: Update, context: ContextTypes.DEFAULT_TYPE):
             telegram_username=username,
             first_name=first_name,
             last_name=last_name,
-            department=department,
+            department=department_enum,
             role=UserRole.PENDING
         )
         db.add(new_user)
@@ -133,10 +150,10 @@ async def get_department(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.edit_message_text(
         f"✅ Спасибо за регистрацию!\n\n"
-        f"=d {first_name} {last_name}\n"
-        f"< B45;: {department}\n\n"
-        f"⏳ Ваша заявка отправлена на одобрение администратору.\n"
-        f"Вы получите уведомление, когда ваша заявка будет одобрена."
+        f"👤 ФИО: {first_name} {last_name}\n"
+        f"🏢 Отдел: {department_name}\n\n"
+        f"⏳ Ваша заявка отправлена на одобрение владельцу бизнеса.\n"
+        f"📱 Вы получите уведомление, когда заявка будет рассмотрена."
     )
     
     # Notify admins
@@ -150,11 +167,12 @@ async def get_department(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             await context.bot.send_message(
                 chat_id=admin_id,
-                text=f"📝 Новая заявка на регистрацию:\n\n"
-                     f"< {user_id}\n"
-                     f"=d {first_name} {last_name}\n"
-                     f"= @{username}\n"
-                     f"< {department}",
+                text=f"📝 Новая заявка на регистрацию руководителя:\n\n"
+                     f"👤 ФИО: {first_name} {last_name}\n"
+                     f"🆔 ID: {user_id}\n"
+                     f"📱 Username: @{username}\n"
+                     f"🏢 Отдел: {department_name}\n\n"
+                     f"Требуется ваше одобрение:",
                 reply_markup=reply_markup
             )
         except Exception as e:

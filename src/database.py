@@ -11,9 +11,9 @@ from src.config import settings
 Base = declarative_base()
 
 class UserRole(enum.Enum):
-    ADMIN = "admin"
-    MANAGER = "manager"
-    PENDING = "pending"
+    OWNER = "owner"  # Владелец бизнеса (вы и партнер)
+    MANAGER = "manager"  # Руководитель отдела
+    PENDING = "pending"  # Ожидает одобрения
 
 class UserStatus(enum.Enum):
     ACTIVE = "active"
@@ -28,6 +28,15 @@ class MeetingStatus(enum.Enum):
     CANCELLED = "cancelled"
     NO_SHOW = "no_show"
 
+class Department(enum.Enum):
+    FARM = "Фарм отдел"
+    FINANCE = "Фин отдел"
+    HR = "HR отдел"
+    TECH = "Тех отдел"
+    IT = "ИТ отдел"
+    BIZDEV = "Биздев отдел"
+    GAMEDEV = "Геймдев проект"
+
 class User(Base):
     __tablename__ = "users"
     
@@ -36,7 +45,7 @@ class User(Base):
     telegram_username = Column(String(255))
     first_name = Column(String(255), nullable=False)
     last_name = Column(String(255), nullable=False)
-    department = Column(String(255), nullable=False)
+    department = Column(Enum(Department), nullable=False)
     role = Column(Enum(UserRole), default=UserRole.PENDING)
     status = Column(Enum(UserStatus), default=UserStatus.ACTIVE)
     created_at = Column(DateTime, server_default=func.now())
@@ -72,6 +81,34 @@ class Reminder(Base):
     created_at = Column(DateTime, server_default=func.now())
     
     user = relationship("User", back_populates="reminders")
+
+class OwnerAvailability(Base):
+    """Доступные дни недели и часы для владельцев"""
+    __tablename__ = "owner_availability"
+    
+    id = Column(Integer, primary_key=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    day_of_week = Column(Integer, nullable=False)  # 0=Monday, 6=Sunday
+    start_time = Column(String(5), nullable=False)  # "09:00"
+    end_time = Column(String(5), nullable=False)    # "18:00"
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+    
+    owner = relationship("User", foreign_keys=[owner_id])
+
+class OwnerBlockedTime(Base):
+    """Заблокированное время владельцев"""
+    __tablename__ = "owner_blocked_time"
+    
+    id = Column(Integer, primary_key=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    blocked_from = Column(DateTime, nullable=False)
+    blocked_to = Column(DateTime, nullable=False)
+    reason = Column(String(255))  # Причина блокировки
+    created_at = Column(DateTime, server_default=func.now())
+    
+    owner = relationship("User", foreign_keys=[owner_id])
 
 class Statistics(Base):
     __tablename__ = "statistics"
