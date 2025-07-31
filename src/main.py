@@ -131,6 +131,23 @@ def main():
         init_db()
         logger.info("✅ Database initialized")
         
+        # 🚨 CRITICAL FIX: Apply google_calendar_id migration if needed
+        logger.info("🔧 APPLYING CRITICAL MIGRATION FIX...")
+        try:
+            import sys
+            import os
+            sys.path.append(os.path.dirname(os.path.dirname(__file__)))  # Add project root to path
+            from migrations.add_google_calendar_id_field import upgrade
+            
+            migration_success = upgrade()
+            if migration_success:
+                logger.info("✅ Critical migration applied successfully")
+            else:
+                logger.warning("⚠️ Critical migration may have failed, but continuing startup")
+        except Exception as migration_error:
+            logger.error(f"❌ Critical migration error: {migration_error}")
+            logger.warning("⚠️ Continuing startup despite migration error")
+        
         # Auto-restore is handled by database.py during initialization
         if settings.database_url.startswith('postgresql'):
             logger.info("🔄 Database initialization includes data consistency checks")
