@@ -47,6 +47,11 @@ meeting-scheduler-bot/
 │       ├── safe_implementation.py # Безопасное внедрение решений
 │       ├── post_solution_monitoring.py # Пост-решение мониторинг
 │       └── diagnostic_orchestrator.py # Главный оркестратор
+├── ultimate_diagnostic_cli.py   # 🔧 CLI интерфейс диагностической системы
+├── ultimate_diagnostic_demo.py  # 🎯 Демонстрация возможностей системы
+├── examples/                    # Примеры использования
+│   ├── fix_timeout_solution.py  # Пример решения проблемы
+│   └── verify_timeout_fix.py    # Пример верификации решения
 ├── alembic/                     # Миграции базы данных
 ├── requirements.txt             # Python зависимости
 ├── .env                        # Переменные окружения
@@ -306,7 +311,46 @@ alembic downgrade -1
 
 ## 🧪 **Тестирование**
 
-### **Диагностические Скрипты**
+### **CLI Интерфейс Диагностической Системы**
+```bash
+# Полная диагностика проблемы с 6-фазным анализом
+python3 ultimate_diagnostic_cli.py diagnose "Бот не отвечает" --error "Timeout after 30s" --full-analysis
+
+# Быстрая проверка здоровья системы
+python3 ultimate_diagnostic_cli.py quick-check
+
+# Мониторинг после решения проблемы
+python3 ultimate_diagnostic_cli.py monitor --duration 60 --alert-webhook http://alerts.company.com
+
+# Безопасная реализация решения с автоматическим откатом
+python3 ultimate_diagnostic_cli.py implement-solution "Исправить таймаут webhook" \
+  --solution-file examples/fix_timeout_solution.py \
+  --verification-file examples/verify_timeout_fix.py \
+  --backup-files /etc/nginx/nginx.conf,/app/config.yaml
+
+# Показать результаты диагностики
+python3 ultimate_diagnostic_cli.py show-report diagnostic_report_diag_1234567890.json
+
+# Информация о версии системы
+python3 ultimate_diagnostic_cli.py version
+```
+
+### **Интерактивная Демонстрация**
+```bash
+# Интерактивная демонстрация всех возможностей
+python3 ultimate_diagnostic_demo.py
+
+# Автоматический показ всех демо
+python3 ultimate_diagnostic_demo.py --auto
+
+# Демонстрация конкретной функции
+python3 ultimate_diagnostic_demo.py --telegram  # Диагностика Telegram проблем
+python3 ultimate_diagnostic_demo.py --hypothesis  # Тестирование гипотез
+python3 ultimate_diagnostic_demo.py --implementation  # Безопасная реализация
+python3 ultimate_diagnostic_demo.py --monitoring  # Пост-решение мониторинг
+```
+
+### **Устаревшие Диагностические Скрипты** (для совместимости)
 ```bash
 # Быстрая диагностика всей системы
 python3 quick_diagnostic.py
