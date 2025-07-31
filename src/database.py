@@ -244,14 +244,23 @@ def _ensure_missing_fields_exist():
 
 def init_db():
     """Initialize database with bulletproof error handling and auto-migration."""
+    logger.info("🚀 DATABASE INIT: ========== STARTING ==========")
     logger.info("🚀 Initializing database with bulletproof system...")
     
     try:
+        # Test database connection first
+        logger.info("🚀 DATABASE: Testing connection...")
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT 1")).fetchone()
+            logger.info(f"🚀 DATABASE: ✅ Connection successful: {result}")
+        
         # For PostgreSQL, we need to handle enum types carefully
         if settings.database_url.startswith('postgresql'):
-            logger.info("Initializing PostgreSQL database with enum support...")
+            logger.info("🚀 DATABASE: Initializing PostgreSQL with enum support...")
             # Create all tables and enum types (не удаляет существующие данные)
+            logger.info("🚀 DATABASE: Creating all tables...")
             Base.metadata.create_all(bind=engine)
+            logger.info("🚀 DATABASE: ✅ Tables created successfully")
             
             # Проверяем и добавляем отсутствующие поля
             _ensure_missing_fields_exist()

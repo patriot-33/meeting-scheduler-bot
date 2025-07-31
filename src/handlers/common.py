@@ -9,7 +9,16 @@ logger = logging.getLogger(__name__)
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command."""
+    logger.info("🚀 START COMMAND: ========== /start RECEIVED ==========")
+    
     user_id = update.effective_user.id
+    username = update.effective_user.username
+    first_name = update.effective_user.first_name
+    chat_id = update.effective_chat.id
+    
+    logger.info(f"🚀 START: User ID {user_id} (@{username}) '{first_name}'")
+    logger.info(f"🚀 START: Chat ID {chat_id}")
+    logger.info(f"🚀 START: Message: {update.message.text}")
     
     # Сохраняем важные данные перед проверкой пользователя
     preserved_data = {}

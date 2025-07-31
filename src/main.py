@@ -53,11 +53,27 @@ async def health_handler(request: Request):
 
 async def error_handler(update: Update, context):
     """Log errors caused by updates."""
+    logger.error("🚨 ERROR HANDLER: ========== ERROR OCCURRED ==========")
+    
     from sqlalchemy.exc import DataError, IntegrityError, DatabaseError, OperationalError
     from telegram.error import TelegramError, NetworkError, TimedOut
     
     error_type = type(context.error).__name__
     user_id = update.effective_user.id if update and update.effective_user else "Unknown"
+    
+    logger.error(f"🚨 ERROR TYPE: {error_type}")
+    logger.error(f"🚨 ERROR MESSAGE: {context.error}")
+    logger.error(f"🚨 USER ID: {user_id}")
+    logger.error(f"🚨 FULL TRACEBACK: {traceback.format_exc()}")
+    
+    if update:
+        logger.error(f"🚨 UPDATE TYPE: {type(update)}")
+        if update.message:
+            logger.error(f"🚨 MESSAGE TEXT: {update.message.text}")
+        if update.callback_query:
+            logger.error(f"🚨 CALLBACK DATA: {update.callback_query.data}")
+    else:
+        logger.error("🚨 UPDATE: None")
     
     # Handle specific database errors
     if isinstance(context.error, (DataError, IntegrityError)):
@@ -124,12 +140,20 @@ def main():
         return
     
     # Create application
+    logger.info("🤖 BUILDING TELEGRAM APPLICATION...")
     application = Application.builder().token(settings.bot_token).build()
+    logger.info("🤖 ✅ APPLICATION BUILT")
+    
+    # Add error handler first
+    logger.info("🤖 ADDING ERROR HANDLER...")
+    application.add_error_handler(error_handler)
     
     # Add handlers
+    logger.info("🤖 ADDING CONVERSATION HANDLERS...")
     # ConversationHandlers first (highest priority)
     application.add_handler(registration.get_registration_handler())
     application.add_handler(owner.get_owner_conversation_handler())
+    logger.info("🤖 ✅ CONVERSATION HANDLERS ADDED")
     
     # Callback query handlers (medium priority)
     application.add_handler(CallbackQueryHandler(admin.handle_admin_callback, pattern="^admin_"))
@@ -186,8 +210,11 @@ def main():
     application.add_handler(CommandHandler("disconnect_calendar", manager_calendar_simple.disconnect_calendar))  # Disconnect calendar
     application.add_handler(CommandHandler("email", manager_calendar.save_manager_email))
     
-    # Error handler
-    application.add_error_handler(error_handler)
+    logger.info("🤖 ✅ ALL HANDLERS ADDED SUCCESSFULLY")
+    logger.info(f"🤖 TOTAL HANDLERS: {len(application.handlers[0])}")  # Get first group handlers count
+    
+    # Error handler already added earlier
+    # application.add_error_handler(error_handler)  # Commented out to avoid duplicate
     
     # Setup scheduler for reminders
     try:
@@ -212,27 +239,47 @@ def main():
             async def webhook_handler(request):
                 """Handle incoming webhook updates."""
                 try:
-                    logger.info("📥 WEBHOOK: Received incoming request")
+                    logger.info("📥 WEBHOOK: ========== NEW REQUEST ==========")
+                    logger.info(f"📥 WEBHOOK: Request method: {request.method}")
+                    logger.info(f"📥 WEBHOOK: Request path: {request.path}")
+                    logger.info(f"📥 WEBHOOK: Request headers: {dict(request.headers)}")
+                    
                     data = await request.json()
+                    logger.info(f"📥 WEBHOOK: Raw data: {data}")
                     logger.info(f"📥 WEBHOOK: Data keys: {list(data.keys()) if isinstance(data, dict) else 'not dict'}")
                     
                     update = Update.de_json(data, application.bot)
-                    if update:
-                        logger.info(f"📥 WEBHOOK: Processing update type: {type(update).__name__}")
-                        if update.message:
-                            logger.info(f"📥 WEBHOOK: Message from user {update.message.from_user.id}: {update.message.text}")
-                        elif update.callback_query:
-                            logger.info(f"📥 WEBHOOK: Callback query from user {update.callback_query.from_user.id}: {update.callback_query.data}")
-                        
-                        await application.process_update(update)
-                        logger.info("📥 WEBHOOK: Update processed successfully")
-                    else:
-                        logger.warning("📥 WEBHOOK: No update object created from data")
+                    logger.info(f"📥 WEBHOOK: Update object created: {update is not None}")
                     
+                    if update:
+                        logger.info(f"📥 WEBHOOK: Update ID: {update.update_id}")
+                        logger.info(f"📥 WEBHOOK: Processing update type: {type(update).__name__}")
+                        
+                        if update.message:
+                            user = update.message.from_user
+                            logger.info(f"📥 WEBHOOK: MESSAGE from user {user.id} (@{user.username})")
+                            logger.info(f"📥 WEBHOOK: Message text: '{update.message.text}'")
+                            logger.info(f"📥 WEBHOOK: Message chat: {update.message.chat.id}")
+                        elif update.callback_query:
+                            user = update.callback_query.from_user
+                            logger.info(f"📥 WEBHOOK: CALLBACK from user {user.id} (@{user.username})")
+                            logger.info(f"📥 WEBHOOK: Callback data: '{update.callback_query.data}'")
+                            logger.info(f"📥 WEBHOOK: Callback message: {update.callback_query.message.message_id if update.callback_query.message else 'None'}")
+                        else:
+                            logger.info(f"📥 WEBHOOK: Other update type: {update}")
+                        
+                        logger.info("📥 WEBHOOK: Starting application.process_update...")
+                        await application.process_update(update)
+                        logger.info("📥 WEBHOOK: ✅ Update processed successfully")
+                    else:
+                        logger.warning("📥 WEBHOOK: ❌ No update object created from data")
+                    
+                    logger.info("📥 WEBHOOK: Returning 200 response")
                     return aio_web.Response(status=200)
                 except Exception as e:
-                    logger.error(f"📥 WEBHOOK ERROR: {e}")
+                    logger.error(f"📥 WEBHOOK ERROR: {type(e).__name__}: {e}")
                     logger.error(f"📥 WEBHOOK TRACEBACK: {traceback.format_exc()}")
+                    logger.error("📥 WEBHOOK: Returning 500 response")
                     return aio_web.Response(status=500)
             
             async def start_webhook_server():
