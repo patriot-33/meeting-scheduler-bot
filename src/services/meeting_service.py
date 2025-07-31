@@ -48,11 +48,25 @@ class MeetingService:
                 
                 time_str = scheduled_time.strftime('%H:%M')
                 
-                # Use the primary Google Calendar for creating meetings
-                from config import settings
-                if hasattr(settings, 'google_calendar_id_1') and settings.google_calendar_id_1:
+                # Use OAuth-connected owner calendars for creating meetings
+                from database import UserRole
+                
+                # Find owners with connected OAuth calendars
+                owners_with_calendar = self.db.query(User).filter(
+                    User.role == UserRole.OWNER,
+                    User.oauth_credentials.isnot(None),
+                    User.google_calendar_id.isnot(None)
+                ).all()
+                
+                logger.info(f"🔍 DEBUG: Found {len(owners_with_calendar)} owners with OAuth calendars")
+                
+                if owners_with_calendar:
+                    # Use the first owner's calendar for meeting creation
+                    primary_owner = owners_with_calendar[0]
+                    logger.info(f"🔍 DEBUG: Using owner {primary_owner.first_name}'s calendar: {primary_owner.google_calendar_id}")
+                    
                     event_id, meet_link = self.calendar_service.create_meeting_with_owners(
-                        settings.google_calendar_id_1,
+                        primary_owner.google_calendar_id,
                         f"{manager.first_name} {manager.last_name}",
                         manager.department.value,
                         scheduled_time,
@@ -61,26 +75,26 @@ class MeetingService:
                         manager_email=manager_email
                     )
                 else:
-                    # Fallback to basic event creation
-                    event_data = {
-                        'summary': f'Созвон с {manager.department.value}',
-                        'description': f'Встреча с руководителем {manager.first_name} {manager.last_name}',
-                        'start': {
-                            'dateTime': scheduled_time.isoformat(),
-                            'timeZone': 'Europe/Moscow',
-                        },
-                        'end': {
-                            'dateTime': (scheduled_time + timedelta(minutes=60)).isoformat(),
-                            'timeZone': 'Europe/Moscow',
-                        }
-                    }
+                    # No owners have connected their calendars via OAuth
+                    logger.error(f"🔍 DEBUG: No owners have connected their Google Calendar via OAuth")
+                    logger.error(f"🔍 DEBUG: Owners need to use /calendar command to connect their calendars")
                     
+                    # Check if we have legacy Service Account setup as fallback
+                    from config import settings
                     if hasattr(settings, 'google_calendar_id_1') and settings.google_calendar_id_1:
-                        event_result = self.calendar_service.create_event(settings.google_calendar_id_1, event_data)
-                        if isinstance(event_result, tuple):
-                            event_id, meet_link = event_result
-                        else:
-                            event_id = event_result
+                        logger.info(f"🔍 DEBUG: Falling back to Service Account with calendar: {settings.google_calendar_id_1}")
+                        event_id, meet_link = self.calendar_service.create_meeting_with_owners(
+                            settings.google_calendar_id_1,
+                            f"{manager.first_name} {manager.last_name}",
+                            manager.department.value,
+                            scheduled_time,
+                            time_str,
+                            owner_emails,
+                            manager_email=manager_email
+                        )
+                    else:
+                        logger.error(f"🔍 DEBUG: No calendar configuration found - neither OAuth owners nor Service Account")
+                        return None
             
             # Save to database
             meeting = Meeting(

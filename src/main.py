@@ -135,6 +135,7 @@ def main():
     application.add_handler(CallbackQueryHandler(owner.handle_owner_callback, pattern="^owner_"))
     # Note: manager booking callbacks are handled by get_manager_handlers() below
     application.add_handler(CallbackQueryHandler(manager_calendar.handle_calendar_callback, pattern="^(send_email_to_owner|calendar_faq|connect_calendar|reconnect_calendar)$"))
+    application.add_handler(CallbackQueryHandler(owner.handle_owner_calendar_callback, pattern="^(connect_owner_calendar|reconnect_owner_calendar)$"))
     application.add_handler(CallbackQueryHandler(manager_calendar_simple.simple_calendar_faq, pattern="^simple_calendar_faq$"))
     application.add_handler(CallbackQueryHandler(lambda u, c: u.callback_query.answer("📋 Email скопирован!"), pattern="^copy_service_email:"))
     application.add_handler(CallbackQueryHandler(common.handle_navigation_callback, pattern="^nav_"))
@@ -155,6 +156,7 @@ def main():
     
     # Owner commands
     application.add_handler(CommandHandler("owner", owner.owner_menu))
+    application.add_handler(CommandHandler("calendar", owner.connect_owner_calendar))  # OAuth calendar for owners
     
     # Manager commands - new improved handlers
     for handler in manager.get_manager_handlers():

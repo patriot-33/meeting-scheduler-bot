@@ -2,6 +2,7 @@
 Обработчики команд для владельцев бизнеса
 """
 import logging
+import traceback
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, CallbackQueryHandler, MessageHandler, filters
@@ -555,5 +556,192 @@ async def handle_stale_conversation(update: Update, context: ContextTypes.DEFAUL
         await update.message.reply_text(
             "⚠️ Настройка слотов прервана. Используйте /owner для продолжения."
         )
+
+
+@require_owner
+async def connect_owner_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Подключение Google Calendar для владельцев через OAuth."""
+    user_id = update.effective_user.id
+    logger.info(f"🔍 DEBUG: connect_owner_calendar started for owner {user_id}")
+    
+    try:
+        with get_db() as db:
+            user = db.query(User).filter(User.telegram_id == user_id).first()
+            
+            if user.role != UserRole.OWNER:
+                await update.message.reply_text(
+                    "❌ Данная функция доступна только владельцам."
+                )
+                return
+            
+            # Check if calendar is already connected
+            if user.oauth_credentials and user.google_calendar_id:
+                await update.message.reply_text(
+                    f"✅ **Google Calendar уже подключен!**\n\n"
+                    f"📧 Календарь: {user.email}\n"
+                    f"🎉 Владельцы могут создавать встречи с Google Meet!\n\n"
+                    f"Чтобы переподключить календарь, нажмите кнопку ниже.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔄 Переподключить календарь", callback_data="reconnect_owner_calendar")],
+                        [InlineKeyboardButton("← Назад в меню", callback_data="owner_menu")]
+                    ]),
+                    parse_mode='Markdown'
+                )
+                return
+            
+            instructions = """
+🔗 **Подключение Google Calendar для владельца**
+
+Подключив календарь, вы получите:
+
+🎯 **Возможности:**
+• Автоматическое создание встреч в вашем календаре
+• Google Meet ссылки для всех встреч
+• Приглашения менеджеров как участников
+• Напоминания перед встречами
+
+📋 **Процесс подключения:**
+1️⃣ Нажмите "Подключить Google Calendar"
+2️⃣ Войдите в ваш Google аккаунт
+3️⃣ Разрешите доступ к календарю
+4️⃣ Вернитесь в бот для подтверждения
+
+🔒 **Безопасность:**
+• Официальный OAuth 2.0 Google
+• Доступ только к календарю
+• Можно отозвать в любой момент
+"""
+            
+            # Generate OAuth URL
+            logger.info(f"🔍 DEBUG: Starting OAuth service import for owner {user_id}")
+            try:
+                from services.oauth_service import oauth_service
+                logger.info(f"🔍 DEBUG: OAuth service imported successfully")
+                logger.info(f"🔍 DEBUG: OAuth service is_configured: {oauth_service.is_oauth_configured}")
+            
+                # Pre-check OAuth configuration 
+                if not oauth_service.is_oauth_configured:
+                    logger.info(f"🔍 DEBUG: OAuth not configured, showing setup instructions")
+                    instructions += "\n\n❌ **OAuth Client не настроен**\n"
+                    instructions += "Администратор должен добавить:\n"
+                    instructions += "• `GOOGLE_OAUTH_CLIENT_JSON` переменную окружения\n"
+                    instructions += "• Или файл `oauth_client_key.json`\n\n"
+                    instructions += "💡 Используйте Google Cloud Console:\n"
+                    instructions += "1. APIs & Services -> Credentials\n"
+                    instructions += "2. Create OAuth 2.0 Client -> Web Application\n"
+                    webhook_url = settings.webhook_url or "YOUR_WEBHOOK_URL"
+                    instructions += f"3. Add redirect URI: `{webhook_url}/oauth/callback`"
+                    
+                    keyboard = [
+                        [InlineKeyboardButton("← Назад в меню", callback_data="owner_menu")]
+                    ]
+                    logger.info(f"🔍 DEBUG: OAuth not configured path - message prepared")
+                else:
+                    logger.info(f"🔍 DEBUG: Generating OAuth URL for owner {user_id}")
+                    oauth_url = oauth_service.generate_auth_url(user_id)
+                    logger.info(f"🔍 DEBUG: OAuth URL result: {'Generated' if oauth_url else 'None'}")
+                    
+                    if oauth_url:
+                        logger.info(f"🔍 DEBUG: OAuth URL generated successfully, length: {len(oauth_url)}")
+                        keyboard = [
+                            [InlineKeyboardButton("🔗 Подключить Google Calendar", url=oauth_url)],
+                            [InlineKeyboardButton("← Назад в меню", callback_data="owner_menu")]
+                        ]
+                        logger.info(f"🔍 DEBUG: OAuth configured path - message with URL prepared")
+                    else:
+                        logger.info(f"🔍 DEBUG: OAuth URL generation failed")
+                        # OAuth URL generation failed
+                        instructions += "\n\n❌ **Ошибка генерации OAuth URL**\n"
+                        instructions += "Проверьте:\n"
+                        instructions += "• Корректность OAuth Client JSON\n"
+                        instructions += "• Настройку WEBHOOK_URL\n"
+                        instructions += "• Redirect URI в Google Console"
+                        keyboard = [
+                            [InlineKeyboardButton("← Назад в меню", callback_data="owner_menu")]
+                        ]
+                        logger.info(f"🔍 DEBUG: OAuth URL failed path - message prepared")
+            except Exception as oauth_error:
+                logger.error(f"🔍 DEBUG: OAuth service error for owner {user_id}: {type(oauth_error).__name__}: {oauth_error}")
+                logger.error(f"🔍 DEBUG: OAuth traceback: {traceback.format_exc()}")
+                instructions += "\n\n❌ **Проблема с настройкой OAuth**\n"
+                instructions += "Администратор должен проверить конфигурацию.\n\n"
+                keyboard = [
+                    [InlineKeyboardButton("← Назад в меню", callback_data="owner_menu")]
+                ]
+                logger.info(f"🔍 DEBUG: OAuth error path - message prepared")
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            logger.info(f"🔍 DEBUG: Sending response to owner {user_id}")
+            logger.info(f"🔍 DEBUG: Message length: {len(instructions)} characters")
+            logger.info(f"🔍 DEBUG: Keyboard buttons count: {len(keyboard)}")
+            
+            try:
+                await update.message.reply_text(
+                    instructions, 
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+                logger.info(f"🔍 DEBUG: Response sent successfully to owner {user_id}")
+            except Exception as send_error:
+                logger.error(f"🔍 DEBUG: Failed to send message to owner {user_id}: {type(send_error).__name__}: {send_error}")
+                # Try sending without markdown formatting but keep the keyboard
+                try:
+                    clean_instructions = instructions.replace('**', '').replace('`', '').replace('*', '')
+                    await update.message.reply_text(
+                        clean_instructions,
+                        reply_markup=reply_markup
+                    )
+                    logger.info(f"🔍 DEBUG: Response sent without markdown formatting but with keyboard")
+                except Exception as fallback_error:
+                    logger.error(f"🔍 DEBUG: Fallback send also failed: {type(fallback_error).__name__}: {fallback_error}")
+                    # Last resort - send without keyboard
+                    try:
+                        await update.message.reply_text(clean_instructions)
+                        logger.info(f"🔍 DEBUG: Response sent without markdown and without keyboard")
+                    except Exception as final_error:
+                        logger.error(f"🔍 DEBUG: All send attempts failed: {type(final_error).__name__}: {final_error}")
+                        raise send_error
+        
+    except Exception as main_error:
+        error_type = type(main_error).__name__
+        logger.error(f"🔍 DEBUG: Exception in connect_owner_calendar for owner {user_id}: {error_type}: {main_error}")
+        logger.error(f"🔍 DEBUG: Traceback: {traceback.format_exc()}")
+        
+        # Provide user-friendly error message
+        try:
+            await update.message.reply_text(
+                f"❌ **Ошибка подключения календаря**\n\n"
+                f"Произошла техническая ошибка: `{error_type}`\n\n"
+                f"Обратитесь к администратору.",
+                parse_mode='Markdown'
+            )
+        except Exception as reply_error:
+            logger.error(f"Failed to send error message to owner {user_id}: {reply_error}")
+            raise main_error
+
+
+async def handle_owner_calendar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка callback для календаря владельца."""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "connect_owner_calendar":
+        # Перенаправляем на основную функцию подключения
+        fake_update = type('obj', (object,), {
+            'effective_user': query.from_user,
+            'message': type('obj', (object,), {
+                'reply_text': query.edit_message_text
+            })()
+        })()
+        await connect_owner_calendar(fake_update, context)
+    elif query.data == "reconnect_owner_calendar":
+        # Переподключение календаря
+        fake_update = type('obj', (object,), {
+            'effective_user': query.from_user,
+            'message': type('obj', (object,), {
+                'reply_text': query.edit_message_text
+            })()
+        })()
+        await connect_owner_calendar(fake_update, context)
     
     return ConversationHandler.END
