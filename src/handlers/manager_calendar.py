@@ -81,6 +81,7 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
                 # Pre-check OAuth configuration 
                 if not oauth_service.is_oauth_configured:
+                    logger.info(f"🔍 DEBUG: OAuth not configured, showing setup instructions")
                     instructions += "\n\n❌ **OAuth Client не настроен**\n"
                     instructions += "Администратор должен добавить:\n"
                     instructions += "• `GOOGLE_OAUTH_CLIENT_JSON` переменную окружения\n"
@@ -88,25 +89,30 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     instructions += "💡 Используйте Google Cloud Console:\n"
                     instructions += "1. APIs & Services → Credentials\n"
                     instructions += "2. Create OAuth 2.0 Client → Web Application\n"
-                    instructions += "3. Add redirect URI: `{}/oauth/callback`".format(settings.webhook_url or "YOUR_WEBHOOK_URL")
+                    webhook_url = settings.webhook_url or "YOUR_WEBHOOK_URL"
+                    instructions += f"3. Add redirect URI: `{webhook_url}/oauth/callback`"
                     
                     keyboard = [
                         [InlineKeyboardButton("❓ Частые вопросы", callback_data="calendar_faq")],
                         [InlineKeyboardButton("📧 Сообщить email владельцу", callback_data="send_email_to_owner")],
                         [InlineKeyboardButton("← Назад", callback_data="nav_main_menu")]
                     ]
+                    logger.info(f"🔍 DEBUG: OAuth not configured path - message prepared")
                 else:
                     logger.info(f"🔍 DEBUG: Generating OAuth URL for user {user_id}")
                     oauth_url = oauth_service.generate_auth_url(user_id)
                     logger.info(f"🔍 DEBUG: OAuth URL result: {'Generated' if oauth_url else 'None'}")
                     
                     if oauth_url:
+                        logger.info(f"🔍 DEBUG: OAuth URL generated successfully, length: {len(oauth_url)}")
                         keyboard = [
                             [InlineKeyboardButton("🔗 Подключить Google Calendar", url=oauth_url)],
                             [InlineKeyboardButton("❓ Частые вопросы", callback_data="calendar_faq")],
                             [InlineKeyboardButton("← Назад", callback_data="nav_main_menu")]
                         ]
+                        logger.info(f"🔍 DEBUG: OAuth configured path - message with URL prepared")
                     else:
+                        logger.info(f"🔍 DEBUG: OAuth URL generation failed")
                         # OAuth URL generation failed
                         instructions += "\n\n❌ **Ошибка генерации OAuth URL**\n"
                         instructions += "Проверьте:\n"
@@ -118,6 +124,7 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             [InlineKeyboardButton("📧 Сообщить email владельцу", callback_data="send_email_to_owner")],
                             [InlineKeyboardButton("← Назад", callback_data="nav_main_menu")]
                         ]
+                        logger.info(f"🔍 DEBUG: OAuth URL failed path - message prepared")
             except Exception as oauth_error:
                 logger.error(f"🔍 DEBUG: OAuth service error for user {user_id}: {type(oauth_error).__name__}: {oauth_error}")
                 logger.error(f"🔍 DEBUG: OAuth traceback: {traceback.format_exc()}")
@@ -130,13 +137,28 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             reply_markup = InlineKeyboardMarkup(keyboard)
             logger.info(f"🔍 DEBUG: Sending response to user {user_id}")
+            logger.info(f"🔍 DEBUG: Message length: {len(instructions)} characters")
+            logger.info(f"🔍 DEBUG: Keyboard buttons count: {len(keyboard)}")
             
-            await update.message.reply_text(
-                instructions, 
-                reply_markup=reply_markup,
-                parse_mode='Markdown'
-            )
-            logger.info(f"🔍 DEBUG: Response sent successfully to user {user_id}")
+            try:
+                await update.message.reply_text(
+                    instructions, 
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+                logger.info(f"🔍 DEBUG: Response sent successfully to user {user_id}")
+            except Exception as send_error:
+                logger.error(f"🔍 DEBUG: Failed to send message to user {user_id}: {type(send_error).__name__}: {send_error}")
+                # Try sending without markdown formatting
+                try:
+                    await update.message.reply_text(
+                        instructions.replace('**', '').replace('`', ''),
+                        reply_markup=reply_markup
+                    )
+                    logger.info(f"🔍 DEBUG: Response sent without markdown formatting")
+                except Exception as fallback_error:
+                    logger.error(f"🔍 DEBUG: Fallback send also failed: {type(fallback_error).__name__}: {fallback_error}")
+                    raise send_error
         
     except Exception as main_error:
         error_type = type(main_error).__name__
