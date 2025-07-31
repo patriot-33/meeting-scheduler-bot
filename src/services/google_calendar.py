@@ -360,8 +360,14 @@ class GoogleCalendarService:
                 'timeZone': 'Europe/Moscow',
             },
             'attendees': attendees,  # WILL CAUSE ERROR WITHOUT DOMAIN-WIDE DELEGATION
-            # NOTE: conferenceData removed due to API restrictions
-            # Google Meet links require specific API permissions
+            'conferenceData': {
+                'createRequest': {
+                    'requestId': f"meet-{int(datetime.now().timestamp())}-{hash(str(manager_calendar_id))%10000}",
+                    'conferenceSolutionKey': {
+                        'type': 'hangoutsMeet'
+                    }
+                }
+            },
             'reminders': {
                 'useDefault': False,
                 'overrides': [
@@ -432,8 +438,14 @@ class GoogleCalendarService:
                 'timeZone': 'Europe/Moscow',
             },
             # NO attendees field - this avoids the Service Account error
-            # NOTE: conferenceData removed due to API restrictions
-            # Google Meet links require specific API permissions
+            'conferenceData': {
+                'createRequest': {
+                    'requestId': f"meet-{int(datetime.now().timestamp())}-{hash(str(manager_calendar_id))%10000}",
+                    'conferenceSolutionKey': {
+                        'type': 'hangoutsMeet'
+                    }
+                }
+            },
             'reminders': {
                 'useDefault': False,
                 'overrides': [
@@ -452,12 +464,24 @@ class GoogleCalendarService:
             raise Exception(f"Cannot access calendar {manager_calendar_id}: {access_error}")
 
         # Create event in manager's calendar WITHOUT sendUpdates
-        event = self._service.events().insert(
-            calendarId=manager_calendar_id,
-            body=event_data
-            # NO conferenceDataVersion - not needed without conferenceData
-            # NO sendUpdates - this avoids the Service Account error
-        ).execute()
+        try:
+            event = self._service.events().insert(
+                calendarId=manager_calendar_id,
+                body=event_data,
+                conferenceDataVersion=1
+                # NO sendUpdates - this avoids the Service Account error
+            ).execute()
+        except Exception as conf_error:
+            logger.warning(f"⚠️ CONFERENCE ERROR: {conf_error}")
+            logger.info("🔄 RETRY: Creating event without conferenceData...")
+            # Remove conferenceData and try again
+            event_data_no_conf = event_data.copy()
+            event_data_no_conf.pop('conferenceData', None)
+            event = self._service.events().insert(
+                calendarId=manager_calendar_id,
+                body=event_data_no_conf
+            ).execute()
+            logger.info("✅ Created event without Google Meet due to API restrictions")
         
         event_id = event.get('id')
         meet_link = event.get('hangoutLink', '')
@@ -486,7 +510,7 @@ class GoogleCalendarService:
         except Exception as e:
             logger.warning(f"⚠️ DUPLICATION ERROR: {e}")
     
-    def cancel_meeting(self, event_id: str) -> bool:
+    def cancel_meeting(self, event_id: str, calendar_id: str = None) -> bool:
         """Cancel a meeting in Google Calendar by event ID."""
         if not self.is_available:
             logger.warning("Google Calendar not available - cannot cancel meeting")
@@ -496,12 +520,41 @@ class GoogleCalendarService:
             logger.error("No event ID provided for cancellation")
             return False
         
+        # Find the calendar that has this event
+        if not calendar_id:
+            logger.info(f"🔍 CANCEL: Searching for event {event_id} in connected calendars")
+            from database import get_db, User
+            
+            with get_db() as db:
+                oauth_users = db.query(User).filter(
+                    User.oauth_credentials.isnot(None),
+                    User.google_calendar_id.isnot(None)
+                ).all()
+                
+                for user in oauth_users:
+                    try:
+                        # Try to get event from this calendar
+                        self._service.events().get(
+                            calendarId=user.google_calendar_id,
+                            eventId=event_id
+                        ).execute()
+                        calendar_id = user.google_calendar_id
+                        logger.info(f"✅ CANCEL: Found event in {user.first_name}'s calendar: {calendar_id}")
+                        break
+                    except Exception:
+                        continue
+        
+        if not calendar_id:
+            logger.error(f"❌ CANCEL: Event {event_id} not found in any connected calendar")
+            return False
+        
         try:
             # Delete the event from Google Calendar
             self._service.events().delete(
-                calendarId='primary',
+                calendarId=calendar_id,
                 eventId=event_id
             ).execute()
+            logger.info(f"✅ CANCEL: Event {event_id} deleted from calendar {calendar_id}")
             
             logger.info(f"Successfully cancelled Google Calendar event: {event_id}")
             return True

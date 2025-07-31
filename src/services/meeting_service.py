@@ -166,6 +166,7 @@ class MeetingService:
                 scheduled_time=scheduled_time,
                 google_event_id=event_id,
                 google_meet_link=meet_link,
+                google_calendar_id=calendar_id_to_use,  # Save which calendar was used
                 status=MeetingStatus.SCHEDULED
             )
             
@@ -192,8 +193,8 @@ class MeetingService:
             return False
         
         try:
-            # Cancel in Google Calendar
-            self.calendar_service.cancel_meeting(meeting.google_event_id)
+            # Cancel in Google Calendar with saved calendar_id
+            self.calendar_service.cancel_meeting(meeting.google_event_id, meeting.google_calendar_id)
             
             # Update database
             meeting.status = MeetingStatus.CANCELLED
@@ -201,7 +202,8 @@ class MeetingService:
             
             return True
             
-        except Exception:
+        except Exception as e:
+            logger.error(f"Failed to cancel meeting {meeting_id}: {e}")
             return False
     
     def get_user_meetings(self, user_id: int, future_only: bool = True) -> List[Meeting]:

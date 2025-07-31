@@ -69,6 +69,7 @@ class Meeting(Base):
     scheduled_time = Column(DateTime, nullable=False)
     google_event_id = Column(String(255), unique=True)
     google_meet_link = Column(String(500))
+    google_calendar_id = Column(String(255))  # Calendar where event was created
     status = Column(Enum(MeetingStatus, name='meetingstatus', values_callable=lambda x: [e.value for e in x]), default=MeetingStatus.SCHEDULED)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
@@ -225,6 +226,17 @@ def _ensure_missing_fields_exist():
             logger.info("✅ Поле calendar_connected успешно добавлено")
         else:
             logger.info("✅ Поле calendar_connected уже существует")
+        
+        # Check meetings table for google_calendar_id column
+        meetings_columns = [col.name for col in inspector.get_columns('meetings')]
+        if 'google_calendar_id' not in meetings_columns:
+            logger.info("Добавляем поле google_calendar_id в таблицу meetings...")
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE meetings ADD COLUMN google_calendar_id VARCHAR(255)"))
+                conn.commit()
+            logger.info("✅ Поле google_calendar_id в meetings успешно добавлено")
+        else:
+            logger.info("✅ Поле google_calendar_id в meetings уже существует")
             
     except Exception as e:
         logger.warning(f"⚠️ Не удалось проверить/добавить поля: {e}")
