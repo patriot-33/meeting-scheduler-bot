@@ -2,6 +2,7 @@
 Обработчики для подключения Google Calendar руководителями
 """
 import logging
+import traceback
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
@@ -15,6 +16,9 @@ logger = logging.getLogger(__name__)
 async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Подключение Google Calendar через OAuth для руководителей."""
     user_id = update.effective_user.id
+    logger.info(f"🔍 DEBUG: connect_calendar started for user {user_id}")
+    
+    try:
     
     with get_db() as db:
         user = db.query(User).filter(User.telegram_id == user_id).first()
@@ -69,9 +73,11 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • Вы можете отозвать доступ в любой момент
 """
     
-    # Generate OAuth URL
-    try:
-        from services.oauth_service import oauth_service
+        # Generate OAuth URL
+        logger.info(f"🔍 DEBUG: Starting OAuth service import for user {user_id}")
+        try:
+            from services.oauth_service import oauth_service
+            logger.info(f"🔍 DEBUG: OAuth service imported, is_configured: {oauth_service.is_oauth_configured}")
         
         # Pre-check OAuth configuration 
         if not oauth_service.is_oauth_configured:
@@ -90,7 +96,9 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("← Назад", callback_data="nav_main_menu")]
             ]
         else:
+            logger.info(f"🔍 DEBUG: Generating OAuth URL for user {user_id}")
             oauth_url = oauth_service.generate_auth_url(user_id)
+            logger.info(f"🔍 DEBUG: OAuth URL result: {'Generated' if oauth_url else 'None'}")
             
             if oauth_url:
                 keyboard = [
@@ -110,22 +118,30 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("📧 Сообщить email владельцу", callback_data="send_email_to_owner")],
                     [InlineKeyboardButton("← Назад", callback_data="nav_main_menu")]
                 ]
-    except Exception as e:
-        logger.error(f"Error with OAuth service: {e}")
-        instructions += f"\n\n❌ **Критическая ошибка OAuth**\n`{str(e)}`\n\nОбратитесь к администратору."
+        except Exception as oauth_error:
+            logger.error(f"🔍 DEBUG: OAuth service error for user {user_id}: {type(oauth_error).__name__}: {oauth_error}")
+            logger.error(f"🔍 DEBUG: OAuth traceback: {traceback.format_exc()}")
+            instructions += f"\n\n❌ **Критическая ошибка OAuth**\n`{str(oauth_error)}`\n\nОбратитесь к администратору."
         keyboard = [
             [InlineKeyboardButton("❓ Частые вопросы", callback_data="calendar_faq")],
             [InlineKeyboardButton("📧 Сообщить email владельцу", callback_data="send_email_to_owner")],
             [InlineKeyboardButton("← Назад", callback_data="nav_main_menu")]
         ]
     
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        instructions, 
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
-    )
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        logger.info(f"🔍 DEBUG: Sending response to user {user_id}")
+        
+        await update.message.reply_text(
+            instructions, 
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+        logger.info(f"🔍 DEBUG: Response sent successfully to user {user_id}")
+        
+    except Exception as main_error:
+        logger.error(f"🔍 DEBUG: Exception in connect_calendar for user {user_id}: {type(main_error).__name__}: {main_error}")
+        logger.error(f"🔍 DEBUG: Traceback: {traceback.format_exc()}")
+        raise main_error
 
 async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка callback для календаря."""
