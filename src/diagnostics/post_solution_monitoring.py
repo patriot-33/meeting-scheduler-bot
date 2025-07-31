@@ -4,9 +4,12 @@ Continuous monitoring and health checks after solution implementation
 """
 
 import asyncio
-import schedule
 import time
 import json
+try:
+    import schedule
+except ImportError:
+    schedule = None
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass, asdict
@@ -180,13 +183,16 @@ class PostSolutionMonitor:
         self.stop_event.clear()
         
         # Schedule health checks
-        for name, check in self.health_checks.items():
-            schedule.every(check.interval_seconds).seconds.do(
-                self._run_health_check, check_name=name
-            )
-        
-        # Schedule periodic reports
-        schedule.every(15).minutes.do(self._generate_health_report)
+        if schedule:
+            for name, check in self.health_checks.items():
+                schedule.every(check.interval_seconds).seconds.do(
+                    self._run_health_check, check_name=name
+                )
+            
+            # Schedule periodic reports
+            schedule.every(15).minutes.do(self._generate_health_report)
+        else:
+            self.logger.logger.warning("Schedule module not available - using simplified monitoring")
         
         # Start monitoring thread
         self.monitoring_thread = Thread(target=self._monitoring_loop, daemon=True)
@@ -216,19 +222,52 @@ class PostSolutionMonitor:
         if self.monitoring_thread and self.monitoring_thread.is_alive():
             self.monitoring_thread.join(timeout=5)
         
-        schedule.clear()
+        if schedule:
+            schedule.clear()
         self.logger.logger.info("   Monitoring stopped")
     
     def _monitoring_loop(self):
         """Main monitoring loop"""
         try:
             while not self.stop_event.is_set():
-                schedule.run_pending()
+                if schedule:
+                    schedule.run_pending()
+                else:
+                    # Simplified monitoring without schedule
+                    self._run_simplified_monitoring()
                 time.sleep(1)
         except Exception as e:
             self.logger.logger.error(f"❌ Monitoring loop error: {e}")
         finally:
             self.logger.logger.info("   Monitoring loop ended")
+    
+    def _run_simplified_monitoring(self):
+        """Simplified monitoring without schedule module"""
+        import time
+        current_time = time.time()
+        
+        # Run basic health checks every 60 seconds
+        if not hasattr(self, '_last_health_check'):
+            self._last_health_check = 0
+        
+        if current_time - self._last_health_check > 60:
+            for check_name in list(self.health_checks.keys())[:3]:  # Run first 3 checks
+                try:
+                    self._run_health_check(check_name)
+                except Exception as e:
+                    self.logger.logger.error(f"Health check {check_name} failed: {e}")
+            self._last_health_check = current_time
+        
+        # Generate health report every 15 minutes
+        if not hasattr(self, '_last_report'):
+            self._last_report = 0
+        
+        if current_time - self._last_report > 900:  # 15 minutes
+            try:
+                self._generate_health_report()
+            except Exception as e:
+                self.logger.logger.error(f"Health report generation failed: {e}")
+            self._last_report = current_time
     
     def _signal_handler(self, signum, frame):
         """Handle shutdown signals gracefully"""

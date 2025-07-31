@@ -414,8 +414,9 @@ class FiveWhysAnalyzer:
 def _test_db_connection(db_engine) -> bool:
     """Test database connection"""
     try:
+        from sqlalchemy import text
         with db_engine.connect() as conn:
-            conn.execute("SELECT 1")
+            conn.execute(text("SELECT 1"))
         return True
     except Exception:
         return False
@@ -424,9 +425,10 @@ def _test_db_query_time(db_engine) -> float:
     """Test database query response time in milliseconds"""
     import time
     try:
+        from sqlalchemy import text
         start_time = time.time()
         with db_engine.connect() as conn:
-            conn.execute("SELECT 1")
+            conn.execute(text("SELECT 1"))
         return (time.time() - start_time) * 1000
     except Exception:
         return float('inf')
