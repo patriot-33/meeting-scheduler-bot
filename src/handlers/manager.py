@@ -2,6 +2,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 from datetime import datetime, timedelta, date
 import logging
+import traceback
 
 from database import get_db, User, UserRole, UserStatus, Meeting, MeetingStatus
 from services.meeting_service import MeetingService
@@ -575,7 +576,11 @@ async def book_meeting_slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
         
         # Check slot availability using meeting service
-        if not meeting_service.is_slot_available(meeting_datetime):
+        logger.info(f"🔍 DEBUG: Checking slot availability for {meeting_datetime}")
+        slot_available = meeting_service.is_slot_available(meeting_datetime)
+        logger.info(f"🔍 DEBUG: Slot availability result: {slot_available}")
+        
+        if not slot_available:
             await query.edit_message_text(
                 "❌ К сожалению, этот слот уже занят. Выберите другое время."
             )
@@ -583,7 +588,9 @@ async def book_meeting_slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Create meeting
         try:
+            logger.info(f"🔍 DEBUG: Starting meeting creation for user {user.id} at {meeting_datetime}")
             meeting = meeting_service.create_meeting(user.id, meeting_datetime)
+            logger.info(f"🔍 DEBUG: Meeting service returned: {meeting}")
             
             if meeting:
                 # CRITICAL FIX: Send telegram notifications to owners
@@ -619,12 +626,14 @@ async def book_meeting_slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.info(f"Meeting created successfully: {meeting.id}")
                 
             else:
+                logger.error(f"🔍 DEBUG: Meeting service returned None/False for user {user.id}")
                 await query.edit_message_text(
                     "❌ Не удалось создать встречу. Попробуйте позже или обратитесь к администратору."
                 )
                 
         except Exception as e:
-            logger.error(f"Error creating meeting: {e}")
+            logger.error(f"🔍 DEBUG: Exception creating meeting for user {user.id}: {type(e).__name__}: {e}")
+            logger.error(f"🔍 DEBUG: Meeting creation traceback: {traceback.format_exc()}")
             await query.edit_message_text(
                 "❌ Произошла ошибка при создании встречи. Попробуйте позже."
             )
