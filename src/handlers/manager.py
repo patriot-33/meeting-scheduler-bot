@@ -639,7 +639,7 @@ async def book_meeting_slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 import psutil
                 logger.error(f"🔍 SYSTEM: CPU {psutil.cpu_percent()}%, Memory {psutil.virtual_memory().percent}%")
-                logger.error(f"🔍 CONTEXT: User {user.first_name} {user.last_name}, Time {booking_time}")
+                logger.error(f"🔍 CONTEXT: User {user.first_name} {user.last_name}, Time {meeting_datetime}")
                 logger.error(f"🔍 CALENDAR: Service available? {google_calendar_service.is_available}")
             except Exception as diag_error:
                 logger.error(f"🔍 DIAGNOSTIC ERROR: {diag_error}")

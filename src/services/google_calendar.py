@@ -442,6 +442,15 @@ class GoogleCalendarService:
             },
         }
         
+        # First, verify calendar access
+        try:
+            calendar_info = self._service.calendars().get(calendarId=manager_calendar_id).execute()
+            logger.info(f"✅ CALENDAR ACCESS: {calendar_info.get('summary', 'Unknown')} ({manager_calendar_id})")
+        except Exception as access_error:
+            logger.error(f"❌ CALENDAR ACCESS DENIED: {access_error}")
+            logger.error(f"❌ CALENDAR ID: {manager_calendar_id}")
+            raise Exception(f"Cannot access calendar {manager_calendar_id}: {access_error}")
+
         # Create event in manager's calendar WITHOUT sendUpdates
         event = self._service.events().insert(
             calendarId=manager_calendar_id,

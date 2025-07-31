@@ -99,15 +99,45 @@ class MeetingService:
                 if calendar_id_to_use:
                     logger.info(f"🔍 DEBUG: Creating meeting in {calendar_owner_name}'s calendar: {calendar_id_to_use}")
                     
-                    event_id, meet_link = self.calendar_service.create_meeting_with_owners(
-                        calendar_id_to_use,
-                        f"{manager.first_name} {manager.last_name}",
-                        manager.department.value,
-                        scheduled_time,
-                        time_str,
-                        owner_emails,
-                        manager_email=manager_email
-                    )
+                    try:
+                        event_id, meet_link = self.calendar_service.create_meeting_with_owners(
+                            calendar_id_to_use,
+                            f"{manager.first_name} {manager.last_name}",
+                            manager.department.value,
+                            scheduled_time,
+                            time_str,
+                            owner_emails,
+                            manager_email=manager_email
+                        )
+                    except Exception as calendar_error:
+                        logger.error(f"❌ CALENDAR ERROR: Failed to create in {calendar_owner_name}'s calendar: {calendar_error}")
+                        
+                        # If manager's calendar failed, try owner's calendar as fallback
+                        if "manager" in calendar_owner_name:
+                            logger.info("🔄 FALLBACK: Trying owner's calendar...")
+                            owners_with_calendar = self.db.query(User).filter(
+                                User.role == UserRole.OWNER,
+                                User.oauth_credentials.isnot(None),
+                                User.google_calendar_id.isnot(None)
+                            ).all()
+                            
+                            if owners_with_calendar:
+                                fallback_owner = owners_with_calendar[0]
+                                logger.info(f"🔄 FALLBACK: Using owner {fallback_owner.first_name}'s calendar: {fallback_owner.google_calendar_id}")
+                                
+                                event_id, meet_link = self.calendar_service.create_meeting_with_owners(
+                                    fallback_owner.google_calendar_id,
+                                    f"{manager.first_name} {manager.last_name}",
+                                    manager.department.value,
+                                    scheduled_time,
+                                    time_str,
+                                    owner_emails,
+                                    manager_email=manager_email
+                                )
+                            else:
+                                raise calendar_error
+                        else:
+                            raise calendar_error
                 else:
                     # No owners have connected their calendars via OAuth
                     logger.error(f"🔍 DEBUG: No owners have connected their Google Calendar via OAuth")
