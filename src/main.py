@@ -257,7 +257,18 @@ def main():
                 from utils.oauth_handlers import oauth_callback_handler
                 app.router.add_get('/oauth/callback', lambda req: oauth_callback_handler(req, application))
                 
-                # Set webhook with Telegram
+                # Start server FIRST
+                runner = aio_web.AppRunner(app)
+                await runner.setup()
+                site = aio_web.TCPSite(runner, '0.0.0.0', settings.port)
+                await site.start()
+                logger.info(f"✅ Webhook server started on port {settings.port}")
+                logger.info(f"✅ Health check available at /health")
+                
+                # Wait a bit for server to be ready
+                await asyncio.sleep(2)
+                
+                # THEN set webhook with Telegram
                 await application.bot.set_webhook(
                     url=webhook_full_url,
                     allowed_updates=Update.ALL_TYPES
@@ -271,16 +282,10 @@ def main():
                     logger.info(f"🔗 WEBHOOK INFO: Pending updates={webhook_info.pending_update_count}")
                     if webhook_info.last_error_message:
                         logger.error(f"🔗 WEBHOOK ERROR: {webhook_info.last_error_message}")
+                    else:
+                        logger.info(f"🔗 WEBHOOK STATUS: OK - No errors")
                 except Exception as e:
                     logger.error(f"Failed to get webhook info: {e}")
-                
-                # Start server
-                runner = aio_web.AppRunner(app)
-                await runner.setup()
-                site = aio_web.TCPSite(runner, '0.0.0.0', settings.port)
-                await site.start()
-                logger.info(f"✅ Webhook server started on port {settings.port}")
-                logger.info(f"✅ Health check available at /health")
                 
                 # Initialize application
                 await application.initialize()
