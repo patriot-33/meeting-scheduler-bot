@@ -3,6 +3,9 @@ from sqlalchemy import and_
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import logging
+import traceback
+import psutil
+import os
 
 from database import Meeting, User, MeetingStatus, UserStatus, UserRole
 from services.google_calendar import google_calendar_service
@@ -10,6 +13,15 @@ from services.reminder_service import ReminderService
 from services.owner_service import OwnerService
 
 logger = logging.getLogger(__name__)
+
+def log_system_state_for_meeting():
+    """Log system state for meeting creation diagnostics."""
+    try:
+        logger.info(f"📊 SYSTEM STATE: CPU {psutil.cpu_percent()}%, Memory {psutil.virtual_memory().percent}%")
+        logger.info(f"📊 SYSTEM STATE: Disk {psutil.disk_usage('/').percent}%, Connections {len(psutil.net_connections())}")
+        logger.info(f"📊 SYSTEM STATE: Timestamp {datetime.now().isoformat()}")
+    except Exception as e:
+        logger.warning(f"Failed to log system state: {e}")
 
 class MeetingService:
     def __init__(self, db: Session):
@@ -19,11 +31,17 @@ class MeetingService:
     
     def create_meeting(self, manager_id: int, scheduled_time: datetime) -> Optional[Meeting]:
         """Create a new meeting."""
+        log_system_state_for_meeting()
+        logger.info(f"🚀 MEETING CREATION START: Manager ID {manager_id}, Time {scheduled_time}")
+        
         try:
             # Get manager info
             manager = self.db.query(User).filter(User.id == manager_id).first()
             if not manager:
+                logger.error(f"❌ MANAGER NOT FOUND: ID {manager_id}")
                 return None
+            
+            logger.info(f"✅ MANAGER FOUND: {manager.first_name} {manager.last_name} ({manager.department.value})")
             
             # Check if owners are available at this time
             if not OwnerService.are_both_owners_available(scheduled_time):
@@ -115,6 +133,9 @@ class MeetingService:
             return meeting
             
         except Exception as e:
+            logger.error(f"❌ MEETING CREATION FAILED: {str(e)}")
+            logger.error(f"❌ TRACEBACK: {traceback.format_exc()}")
+            log_system_state_for_meeting()
             self.db.rollback()
             raise e
     

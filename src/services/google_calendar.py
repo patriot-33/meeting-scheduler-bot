@@ -258,8 +258,25 @@ class GoogleCalendarService:
             return event.get('id'), event.get('hangoutLink', '')
             
         except HttpError as e:
-            logger.error(f"Failed to create calendar event: {e}")
-            return None, None
+            if 'Invalid conference type value' in str(e) and 'conferenceData' in event_data:
+                logger.warning(f"Conference creation failed: {e}")
+                logger.info("Retrying without conferenceData...")
+                # Remove conferenceData and try again
+                event_data_fallback = event_data.copy()
+                event_data_fallback.pop('conferenceData', None)
+                try:
+                    event = self._service.events().insert(
+                        calendarId=calendar_id,
+                        body=event_data_fallback
+                    ).execute()
+                    logger.info("✅ Created event without Google Meet link due to API restrictions")
+                    return event.get('id'), ''
+                except Exception as fallback_error:
+                    logger.error(f"Fallback also failed: {fallback_error}")
+                    return None, None
+            else:
+                logger.error(f"Failed to create calendar event: {e}")
+                return None, None
         except Exception as e:
             logger.error(f"Error creating calendar event: {e}")
             return None, None
@@ -345,8 +362,10 @@ class GoogleCalendarService:
             'attendees': attendees,  # WILL CAUSE ERROR WITHOUT DOMAIN-WIDE DELEGATION
             'conferenceData': {
                 'createRequest': {
-                    'requestId': f"meeting-{int(datetime.now().timestamp())}",
-                    'conferenceSolutionKey': {'type': 'hangoutsMeet'}
+                    'requestId': f"meeting-{int(datetime.now().timestamp())}-{str(hash(manager_calendar_id))[-8:]}",
+                    'conferenceSolutionKey': {
+                        'type': 'hangoutsMeet'
+                    }
                 }
             },
             'reminders': {
@@ -359,12 +378,25 @@ class GoogleCalendarService:
         }
         
         # Create event in manager's calendar WITH sendUpdates
-        event = self._service.events().insert(
-            calendarId=manager_calendar_id,
-            body=event_data,
-            conferenceDataVersion=1,
-            sendUpdates='all'  # WILL CAUSE ERROR WITHOUT DOMAIN-WIDE DELEGATION
-        ).execute()
+        try:
+            event = self._service.events().insert(
+                calendarId=manager_calendar_id,
+                body=event_data,
+                conferenceDataVersion=1,
+                sendUpdates='all'  # WILL CAUSE ERROR WITHOUT DOMAIN-WIDE DELEGATION
+            ).execute()
+        except Exception as conference_error:
+            logger.warning(f"Failed to create event with conferenceData: {conference_error}")
+            logger.info("Trying to create event without conferenceData...")
+            # Remove conferenceData and try again
+            event_data_fallback = event_data.copy()
+            event_data_fallback.pop('conferenceData', None)
+            event = self._service.events().insert(
+                calendarId=manager_calendar_id,
+                body=event_data_fallback,
+                sendUpdates='all'
+            ).execute()
+            logger.info("✅ Created event without Google Meet link due to API restrictions")
         
         event_id = event.get('id')
         meet_link = event.get('hangoutLink', '')
@@ -408,8 +440,10 @@ class GoogleCalendarService:
             # NO attendees field - this avoids the Service Account error
             'conferenceData': {
                 'createRequest': {
-                    'requestId': f"meeting-{int(datetime.now().timestamp())}",
-                    'conferenceSolutionKey': {'type': 'hangoutsMeet'}
+                    'requestId': f"meeting-{int(datetime.now().timestamp())}-{str(hash(manager_calendar_id))[-8:]}",
+                    'conferenceSolutionKey': {
+                        'type': 'hangoutsMeet'
+                    }
                 }
             },
             'reminders': {
@@ -421,12 +455,25 @@ class GoogleCalendarService:
         }
         
         # Create event in manager's calendar WITHOUT sendUpdates
-        event = self._service.events().insert(
-            calendarId=manager_calendar_id,
-            body=event_data,
-            conferenceDataVersion=1
-            # NO sendUpdates - this avoids the Service Account error
-        ).execute()
+        try:
+            event = self._service.events().insert(
+                calendarId=manager_calendar_id,
+                body=event_data,
+                conferenceDataVersion=1
+                # NO sendUpdates - this avoids the Service Account error
+            ).execute()
+        except Exception as conference_error:
+            logger.warning(f"Failed to create event with conferenceData: {conference_error}")
+            logger.info("Trying to create event without conferenceData...")
+            # Remove conferenceData and try again
+            event_data_fallback = event_data.copy()
+            event_data_fallback.pop('conferenceData', None)
+            event = self._service.events().insert(
+                calendarId=manager_calendar_id,
+                body=event_data_fallback
+                # NO conferenceDataVersion - not needed without conferenceData
+            ).execute()
+            logger.info("✅ Created event without Google Meet link due to API restrictions")
         
         event_id = event.get('id')
         meet_link = event.get('hangoutLink', '')

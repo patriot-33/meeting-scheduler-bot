@@ -53,13 +53,15 @@ async def oauth_callback_handler(request, application):
             
             return aio_web.Response(
                 text="✅ <h1>Календарь успешно подключен!</h1><p>Возвращайтесь в Телеграм бот для планирования встреч.</p>",
-                content_type='text/html; charset=utf-8'
+                content_type='text/html',
+                charset='utf-8'
             )
         else:
             logger.error(f"OAuth callback failed: {result.get('error')}")
             return aio_web.Response(
                 text=f"❌ <h1>Ошибка подключения</h1><p>{result.get('error', 'Неизвестная ошибка')}</p>",
-                content_type='text/html; charset=utf-8',
+                content_type='text/html',
+                charset='utf-8',
                 status=400
             )
         
@@ -67,6 +69,7 @@ async def oauth_callback_handler(request, application):
         logger.error(f"OAuth callback handler error: {e}")
         return aio_web.Response(
             text="❌ Внутренняя ошибка сервера",
-            content_type='text/html; charset=utf-8',
+            content_type='text/html',
+            charset='utf-8',
             status=500
         )

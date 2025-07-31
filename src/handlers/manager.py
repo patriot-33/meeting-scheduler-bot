@@ -634,6 +634,16 @@ async def book_meeting_slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.error(f"🔍 DEBUG: Exception creating meeting for user {user.id}: {type(e).__name__}: {e}")
             logger.error(f"🔍 DEBUG: Meeting creation traceback: {traceback.format_exc()}")
+            
+            # Enhanced diagnostics
+            try:
+                import psutil
+                logger.error(f"🔍 SYSTEM: CPU {psutil.cpu_percent()}%, Memory {psutil.virtual_memory().percent}%")
+                logger.error(f"🔍 CONTEXT: User {user.first_name} {user.last_name}, Time {booking_time}")
+                logger.error(f"🔍 CALENDAR: Service available? {google_calendar_service.is_available}")
+            except Exception as diag_error:
+                logger.error(f"🔍 DIAGNOSTIC ERROR: {diag_error}")
+            
             await query.edit_message_text(
                 "❌ Произошла ошибка при создании встречи. Попробуйте позже."
             )
