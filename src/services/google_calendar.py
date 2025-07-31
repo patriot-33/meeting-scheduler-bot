@@ -443,25 +443,12 @@ class GoogleCalendarService:
         }
         
         # Create event in manager's calendar WITHOUT sendUpdates
-        try:
-            event = self._service.events().insert(
-                calendarId=manager_calendar_id,
-                body=event_data,
-                conferenceDataVersion=1
-                # NO sendUpdates - this avoids the Service Account error
-            ).execute()
-        except Exception as conference_error:
-            logger.warning(f"Failed to create event with conferenceData: {conference_error}")
-            logger.info("Trying to create event without conferenceData...")
-            # Remove conferenceData and try again
-            event_data_fallback = event_data.copy()
-            event_data_fallback.pop('conferenceData', None)
-            event = self._service.events().insert(
-                calendarId=manager_calendar_id,
-                body=event_data_fallback
-                # NO conferenceDataVersion - not needed without conferenceData
-            ).execute()
-            logger.info("✅ Created event without Google Meet link due to API restrictions")
+        event = self._service.events().insert(
+            calendarId=manager_calendar_id,
+            body=event_data
+            # NO conferenceDataVersion - not needed without conferenceData
+            # NO sendUpdates - this avoids the Service Account error
+        ).execute()
         
         event_id = event.get('id')
         meet_link = event.get('hangoutLink', '')
@@ -470,10 +457,8 @@ class GoogleCalendarService:
         logger.info(f"✅ Google Meet link: {meet_link}")
         logger.info(f"📱 Participants will be notified via Telegram Bot instead of Google Calendar")
         
-        # Try to duplicate event to other participants' calendars (use clean event_data without conferenceData)
-        clean_event_data = event_data.copy()
-        clean_event_data.pop('conferenceData', None)  # Remove conferenceData for duplication
-        self._duplicate_event_to_participants(clean_event_data, manager_calendar_id, owner_emails, manager_email)
+        # Try to duplicate event to other participants' calendars
+        self._duplicate_event_to_participants(event_data, manager_calendar_id, owner_emails, manager_email)
         
         return event_id, meet_link
     
@@ -481,31 +466,13 @@ class GoogleCalendarService:
                                        owner_emails: List[str], manager_email: Optional[str]):
         """Duplicate event to other participants' calendars if they have OAuth connected."""
         try:
-            from database import get_db, User, UserRole
+            logger.info(f"📋 DUPLICATION: Attempting to duplicate event to other participants")
+            logger.info(f"📋 DUPLICATION: Primary calendar: {primary_calendar_id}")
+            logger.info(f"📋 DUPLICATION: Target emails: {owner_emails + ([manager_email] if manager_email else [])}")
             
-            with get_db() as db:
-                # Find all users with OAuth calendars
-                oauth_users = db.query(User).filter(
-                    User.oauth_credentials.isnot(None),
-                    User.google_calendar_id.isnot(None),
-                    User.google_calendar_id != primary_calendar_id  # Don't duplicate to primary calendar
-                ).all()
-                
-                for user in oauth_users:
-                    if (user.email in owner_emails or user.email == manager_email):
-                        try:
-                            logger.info(f"📋 DUPLICATING: Event to {user.first_name}'s calendar ({user.google_calendar_id})")
-                            
-                            # Create duplicate event
-                            duplicate_event = self._service.events().insert(
-                                calendarId=user.google_calendar_id,
-                                body=event_data
-                            ).execute()
-                            
-                            logger.info(f"✅ DUPLICATED: Event {duplicate_event.get('id')} in {user.first_name}'s calendar")
-                            
-                        except Exception as dup_error:
-                            logger.warning(f"⚠️ DUPLICATION FAILED: Could not duplicate to {user.first_name}'s calendar: {dup_error}")
+            # Skip duplication for now due to database session conflicts
+            # TODO: Implement async duplication in background task
+            logger.info("📋 DUPLICATION: Skipped for now - will be implemented in background task")
                             
         except Exception as e:
             logger.warning(f"⚠️ DUPLICATION ERROR: {e}")
