@@ -21,6 +21,7 @@ pydantic-settings==2.1.0
 # Utils
 pytz==2023.3
 python-dateutil==2.8.2
+psutil==5.9.6
 
 # Development
 pytest==7.4.3
