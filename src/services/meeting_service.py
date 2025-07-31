@@ -66,25 +66,41 @@ class MeetingService:
                 
                 time_str = scheduled_time.strftime('%H:%M')
                 
-                # Use OAuth-connected owner calendars for creating meetings
+                # PRIORITY: Use manager's calendar if connected, otherwise use owner's calendar
                 from database import UserRole
                 
-                # Find owners with connected OAuth calendars
-                owners_with_calendar = self.db.query(User).filter(
-                    User.role == UserRole.OWNER,
-                    User.oauth_credentials.isnot(None),
-                    User.google_calendar_id.isnot(None)
-                ).all()
+                calendar_id_to_use = None
+                calendar_owner_name = None
                 
-                logger.info(f"🔍 DEBUG: Found {len(owners_with_calendar)} owners with OAuth calendars")
+                # First check if manager has connected calendar
+                if manager.google_calendar_id and manager.oauth_credentials:
+                    calendar_id_to_use = manager.google_calendar_id
+                    calendar_owner_name = f"manager {manager.first_name}"
+                    logger.info(f"🔍 DEBUG: Manager has OAuth calendar connected: {manager.google_calendar_id}")
+                else:
+                    logger.info(f"🔍 DEBUG: Manager does not have OAuth calendar connected")
+                    
+                    # Find owners with connected OAuth calendars as fallback
+                    owners_with_calendar = self.db.query(User).filter(
+                        User.role == UserRole.OWNER,
+                        User.oauth_credentials.isnot(None),
+                        User.google_calendar_id.isnot(None)
+                    ).all()
+                    
+                    logger.info(f"🔍 DEBUG: Found {len(owners_with_calendar)} owners with OAuth calendars")
+                    
+                    if owners_with_calendar:
+                        # Use the first owner's calendar as fallback
+                        primary_owner = owners_with_calendar[0]
+                        calendar_id_to_use = primary_owner.google_calendar_id
+                        calendar_owner_name = f"owner {primary_owner.first_name}"
+                        logger.info(f"🔍 DEBUG: Using owner's calendar as fallback: {primary_owner.google_calendar_id}")
                 
-                if owners_with_calendar:
-                    # Use the first owner's calendar for meeting creation
-                    primary_owner = owners_with_calendar[0]
-                    logger.info(f"🔍 DEBUG: Using owner {primary_owner.first_name}'s calendar: {primary_owner.google_calendar_id}")
+                if calendar_id_to_use:
+                    logger.info(f"🔍 DEBUG: Creating meeting in {calendar_owner_name}'s calendar: {calendar_id_to_use}")
                     
                     event_id, meet_link = self.calendar_service.create_meeting_with_owners(
-                        primary_owner.google_calendar_id,
+                        calendar_id_to_use,
                         f"{manager.first_name} {manager.last_name}",
                         manager.department.value,
                         scheduled_time,

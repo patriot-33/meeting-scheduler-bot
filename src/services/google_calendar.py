@@ -360,14 +360,8 @@ class GoogleCalendarService:
                 'timeZone': 'Europe/Moscow',
             },
             'attendees': attendees,  # WILL CAUSE ERROR WITHOUT DOMAIN-WIDE DELEGATION
-            'conferenceData': {
-                'createRequest': {
-                    'requestId': f"meeting-{int(datetime.now().timestamp())}-{str(hash(manager_calendar_id))[-8:]}",
-                    'conferenceSolutionKey': {
-                        'type': 'hangoutsMeet'
-                    }
-                }
-            },
+            # NOTE: conferenceData removed due to API restrictions
+            # Google Meet links require specific API permissions
             'reminders': {
                 'useDefault': False,
                 'overrides': [
@@ -438,14 +432,8 @@ class GoogleCalendarService:
                 'timeZone': 'Europe/Moscow',
             },
             # NO attendees field - this avoids the Service Account error
-            'conferenceData': {
-                'createRequest': {
-                    'requestId': f"meeting-{int(datetime.now().timestamp())}-{str(hash(manager_calendar_id))[-8:]}",
-                    'conferenceSolutionKey': {
-                        'type': 'hangoutsMeet'
-                    }
-                }
-            },
+            # NOTE: conferenceData removed due to API restrictions
+            # Google Meet links require specific API permissions
             'reminders': {
                 'useDefault': False,
                 'overrides': [
@@ -482,7 +470,45 @@ class GoogleCalendarService:
         logger.info(f"✅ Google Meet link: {meet_link}")
         logger.info(f"📱 Participants will be notified via Telegram Bot instead of Google Calendar")
         
+        # Try to duplicate event to other participants' calendars (use clean event_data without conferenceData)
+        clean_event_data = event_data.copy()
+        clean_event_data.pop('conferenceData', None)  # Remove conferenceData for duplication
+        self._duplicate_event_to_participants(clean_event_data, manager_calendar_id, owner_emails, manager_email)
+        
         return event_id, meet_link
+    
+    def _duplicate_event_to_participants(self, event_data: dict, primary_calendar_id: str, 
+                                       owner_emails: List[str], manager_email: Optional[str]):
+        """Duplicate event to other participants' calendars if they have OAuth connected."""
+        try:
+            from database import get_db, User, UserRole
+            
+            with get_db() as db:
+                # Find all users with OAuth calendars
+                oauth_users = db.query(User).filter(
+                    User.oauth_credentials.isnot(None),
+                    User.google_calendar_id.isnot(None),
+                    User.google_calendar_id != primary_calendar_id  # Don't duplicate to primary calendar
+                ).all()
+                
+                for user in oauth_users:
+                    if (user.email in owner_emails or user.email == manager_email):
+                        try:
+                            logger.info(f"📋 DUPLICATING: Event to {user.first_name}'s calendar ({user.google_calendar_id})")
+                            
+                            # Create duplicate event
+                            duplicate_event = self._service.events().insert(
+                                calendarId=user.google_calendar_id,
+                                body=event_data
+                            ).execute()
+                            
+                            logger.info(f"✅ DUPLICATED: Event {duplicate_event.get('id')} in {user.first_name}'s calendar")
+                            
+                        except Exception as dup_error:
+                            logger.warning(f"⚠️ DUPLICATION FAILED: Could not duplicate to {user.first_name}'s calendar: {dup_error}")
+                            
+        except Exception as e:
+            logger.warning(f"⚠️ DUPLICATION ERROR: {e}")
     
     def cancel_meeting(self, event_id: str) -> bool:
         """Cancel a meeting in Google Calendar by event ID."""
