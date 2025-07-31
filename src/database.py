@@ -228,7 +228,7 @@ def _ensure_missing_fields_exist():
             logger.info("✅ Поле calendar_connected уже существует")
         
         # Check meetings table for google_calendar_id column
-        meetings_columns = [col.name for col in inspector.get_columns('meetings')]
+        meetings_columns = [col['name'] for col in inspector.get_columns('meetings')]
         if 'google_calendar_id' not in meetings_columns:
             logger.info("Добавляем поле google_calendar_id в таблицу meetings...")
             with engine.connect() as conn:

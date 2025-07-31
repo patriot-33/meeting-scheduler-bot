@@ -15,7 +15,7 @@ from aiohttp.web import Request
 
 from config import settings
 from database import init_db
-from handlers import registration, admin, manager, common, owner, manager_calendar, manager_calendar_simple
+from handlers import registration, admin, manager, common, owner, manager_calendar, manager_calendar_simple, check_oauth_status
 from services.reminder_service import ReminderService
 from utils.scheduler import setup_scheduler
 
@@ -223,9 +223,11 @@ def main():
     # Calendar connection handlers - multiple options
     application.add_handler(CommandHandler("calendar", manager_calendar.connect_calendar))  # OAuth method
     application.add_handler(CommandHandler("calendar_simple", manager_calendar_simple.simple_calendar_connect))  # Simple method
+    application.add_handler(CommandHandler("calendar_instructions", manager_calendar_simple.simple_calendar_connect))  # Alias for simple method
     application.add_handler(CommandHandler("setcalendar", manager_calendar_simple.set_calendar_id))  # Set calendar ID
     application.add_handler(CommandHandler("disconnect_calendar", manager_calendar_simple.disconnect_calendar))  # Disconnect calendar
     application.add_handler(CommandHandler("email", manager_calendar.save_manager_email))
+    application.add_handler(check_oauth_status.create_check_oauth_handler())  # Check OAuth status
     
     logger.info("🤖 ✅ ALL HANDLERS ADDED SUCCESSFULLY")
     logger.info(f"🤖 TOTAL HANDLERS: {len(application.handlers[0])}")  # Get first group handlers count

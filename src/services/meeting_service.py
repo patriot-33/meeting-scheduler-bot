@@ -9,6 +9,7 @@ import os
 
 from database import Meeting, User, MeetingStatus, UserStatus, UserRole
 from services.google_calendar import google_calendar_service
+from services.google_calendar_dual import DualCalendarCreator
 from services.reminder_service import ReminderService
 from services.owner_service import OwnerService
 
@@ -27,6 +28,7 @@ class MeetingService:
     def __init__(self, db: Session):
         self.db = db
         self.calendar_service = google_calendar_service
+        self.dual_calendar_creator = DualCalendarCreator(google_calendar_service)
         self.reminder_service = ReminderService()
     
     def create_meeting(self, manager_id: int, scheduled_time: datetime) -> Optional[Meeting]:
@@ -97,18 +99,44 @@ class MeetingService:
                         logger.info(f"🔍 DEBUG: Using owner's calendar as fallback: {primary_owner.google_calendar_id}")
                 
                 if calendar_id_to_use:
-                    logger.info(f"🔍 DEBUG: Creating meeting in {calendar_owner_name}'s calendar: {calendar_id_to_use}")
+                    logger.info(f"🔍 DEBUG: Creating meeting in both calendars")
+                    
+                    # Get owner info for dual calendar creation
+                    primary_owner = owners[0] if owners else None
+                    owner_calendar_id = None
+                    owner_name = "Owner"
+                    owner_email = None
+                    
+                    if primary_owner:
+                        owner_name = f"{primary_owner.first_name} {primary_owner.last_name}"
+                        owner_email = primary_owner.email
+                        # Check if owner has calendar connected
+                        if primary_owner.google_calendar_id:
+                            owner_calendar_id = primary_owner.google_calendar_id
+                    
+                    # Use manager's calendar if available, otherwise use owner's
+                    manager_calendar_id = manager.google_calendar_id if manager.google_calendar_id else calendar_id_to_use
                     
                     try:
-                        event_id, meet_link = self.calendar_service.create_meeting_with_owners(
-                            calendar_id_to_use,
-                            f"{manager.first_name} {manager.last_name}",
-                            manager.department.value,
-                            scheduled_time,
-                            time_str,
-                            owner_emails,
-                            manager_email=manager_email
+                        # Create meeting in both calendars
+                        result = self.dual_calendar_creator.create_meeting_in_both_calendars(
+                            manager_calendar_id=manager_calendar_id,
+                            owner_calendar_id=owner_calendar_id or manager_calendar_id,
+                            manager_name=f"{manager.first_name} {manager.last_name}",
+                            owner_name=owner_name,
+                            manager_email=manager_email,
+                            owner_email=owner_email,
+                            department=manager.department.value,
+                            scheduled_time=scheduled_time,
+                            time_str=time_str
                         )
+                        
+                        if result['success']:
+                            event_id = result['manager_event_id'] or result['owner_event_id']
+                            meet_link = result['meet_link']
+                            logger.info(f"✅ Created meetings: Manager={result['manager_event_id']}, Owner={result['owner_event_id']}")
+                        else:
+                            raise Exception(f"Failed to create meetings: {', '.join(result['errors'])}")
                     except Exception as calendar_error:
                         logger.error(f"❌ CALENDAR ERROR: Failed to create in {calendar_owner_name}'s calendar: {calendar_error}")
                         
@@ -125,15 +153,24 @@ class MeetingService:
                                 fallback_owner = owners_with_calendar[0]
                                 logger.info(f"🔄 FALLBACK: Using owner {fallback_owner.first_name}'s calendar: {fallback_owner.google_calendar_id}")
                                 
-                                event_id, meet_link = self.calendar_service.create_meeting_with_owners(
-                                    fallback_owner.google_calendar_id,
-                                    f"{manager.first_name} {manager.last_name}",
-                                    manager.department.value,
-                                    scheduled_time,
-                                    time_str,
-                                    owner_emails,
-                                    manager_email=manager_email
+                                # Use dual calendar creator for fallback too
+                                result = self.dual_calendar_creator.create_meeting_in_both_calendars(
+                                    manager_calendar_id=fallback_owner.google_calendar_id,
+                                    owner_calendar_id=fallback_owner.google_calendar_id,
+                                    manager_name=f"{manager.first_name} {manager.last_name}",
+                                    owner_name=f"{fallback_owner.first_name} {fallback_owner.last_name}",
+                                    manager_email=manager_email,
+                                    owner_email=fallback_owner.email,
+                                    department=manager.department.value,
+                                    scheduled_time=scheduled_time,
+                                    time_str=time_str
                                 )
+                                
+                                if result['success']:
+                                    event_id = result['manager_event_id'] or result['owner_event_id']
+                                    meet_link = result['meet_link']
+                                else:
+                                    raise Exception(f"Fallback failed: {', '.join(result['errors'])}")
                             else:
                                 raise calendar_error
                         else:
@@ -147,6 +184,7 @@ class MeetingService:
                     from config import settings
                     if hasattr(settings, 'google_calendar_id_1') and settings.google_calendar_id_1:
                         logger.info(f"🔍 DEBUG: Falling back to Service Account with calendar: {settings.google_calendar_id_1}")
+                        # Legacy service account fallback
                         event_id, meet_link = self.calendar_service.create_meeting_with_owners(
                             settings.google_calendar_id_1,
                             f"{manager.first_name} {manager.last_name}",
