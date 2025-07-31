@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import traceback
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -211,13 +212,27 @@ def main():
             async def webhook_handler(request):
                 """Handle incoming webhook updates."""
                 try:
+                    logger.info("📥 WEBHOOK: Received incoming request")
                     data = await request.json()
+                    logger.info(f"📥 WEBHOOK: Data keys: {list(data.keys()) if isinstance(data, dict) else 'not dict'}")
+                    
                     update = Update.de_json(data, application.bot)
                     if update:
+                        logger.info(f"📥 WEBHOOK: Processing update type: {type(update).__name__}")
+                        if update.message:
+                            logger.info(f"📥 WEBHOOK: Message from user {update.message.from_user.id}: {update.message.text}")
+                        elif update.callback_query:
+                            logger.info(f"📥 WEBHOOK: Callback query from user {update.callback_query.from_user.id}: {update.callback_query.data}")
+                        
                         await application.process_update(update)
+                        logger.info("📥 WEBHOOK: Update processed successfully")
+                    else:
+                        logger.warning("📥 WEBHOOK: No update object created from data")
+                    
                     return aio_web.Response(status=200)
                 except Exception as e:
-                    logger.error(f"Webhook handler error: {e}")
+                    logger.error(f"📥 WEBHOOK ERROR: {e}")
+                    logger.error(f"📥 WEBHOOK TRACEBACK: {traceback.format_exc()}")
                     return aio_web.Response(status=500)
             
             async def start_webhook_server():
