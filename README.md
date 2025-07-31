@@ -1,6 +1,12 @@
 # 🤖 Meeting Scheduler Bot
 
-Автоматизированный Telegram-бот для планирования встреч между руководителями отделов и владельцами бизнеса с интеграцией Google Calendar.
+[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://python.org)
+[![Telegram Bot API](https://img.shields.io/badge/Telegram%20Bot%20API-20.7-blue.svg)](https://python-telegram-bot.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Latest-blue.svg)](https://postgresql.org)
+[![Google Calendar API](https://img.shields.io/badge/Google%20Calendar%20API-v3-green.svg)](https://developers.google.com/calendar)
+[![Render](https://img.shields.io/badge/Deployed%20on-Render-46e3b7.svg)](https://render.com)
+
+Интеллектуальный Telegram бот для автоматизации планирования встреч с **уникальной enterprise-grade диагностической системой v2.0**.
 
 ## ✨ Ключевые возможности
 
