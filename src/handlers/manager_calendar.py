@@ -87,8 +87,8 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     instructions += "• `GOOGLE_OAUTH_CLIENT_JSON` переменную окружения\n"
                     instructions += "• Или файл `oauth_client_key.json`\n\n"
                     instructions += "💡 Используйте Google Cloud Console:\n"
-                    instructions += "1. APIs & Services → Credentials\n"
-                    instructions += "2. Create OAuth 2.0 Client → Web Application\n"
+                    instructions += "1. APIs & Services -> Credentials\n"
+                    instructions += "2. Create OAuth 2.0 Client -> Web Application\n"
                     webhook_url = settings.webhook_url or "YOUR_WEBHOOK_URL"
                     instructions += f"3. Add redirect URI: `{webhook_url}/oauth/callback`"
                     
@@ -128,12 +128,17 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as oauth_error:
                 logger.error(f"🔍 DEBUG: OAuth service error for user {user_id}: {type(oauth_error).__name__}: {oauth_error}")
                 logger.error(f"🔍 DEBUG: OAuth traceback: {traceback.format_exc()}")
-                instructions += f"\n\n❌ **Критическая ошибка OAuth**\n`{str(oauth_error)}`\n\nОбратитесь к администратору."
+                instructions += "\n\n❌ **Проблема с настройкой OAuth**\n"
+                instructions += "Администратор должен проверить конфигурацию.\n\n"
+                instructions += "Альтернативные способы подключения:\n"
+                instructions += "• /calendar_simple - простое подключение\n"
+                instructions += "• /email ваш_email@gmail.com - добавление вручную"
                 keyboard = [
                     [InlineKeyboardButton("❓ Частые вопросы", callback_data="calendar_faq")],
                     [InlineKeyboardButton("📧 Сообщить email владельцу", callback_data="send_email_to_owner")],
                     [InlineKeyboardButton("← Назад", callback_data="nav_main_menu")]
                 ]
+                logger.info(f"🔍 DEBUG: OAuth error path - message prepared")
             
             reply_markup = InlineKeyboardMarkup(keyboard)
             logger.info(f"🔍 DEBUG: Sending response to user {user_id}")
@@ -149,16 +154,23 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.info(f"🔍 DEBUG: Response sent successfully to user {user_id}")
             except Exception as send_error:
                 logger.error(f"🔍 DEBUG: Failed to send message to user {user_id}: {type(send_error).__name__}: {send_error}")
-                # Try sending without markdown formatting
+                # Try sending without markdown formatting but keep the keyboard
                 try:
+                    clean_instructions = instructions.replace('**', '').replace('`', '').replace('*', '')
                     await update.message.reply_text(
-                        instructions.replace('**', '').replace('`', ''),
+                        clean_instructions,
                         reply_markup=reply_markup
                     )
-                    logger.info(f"🔍 DEBUG: Response sent without markdown formatting")
+                    logger.info(f"🔍 DEBUG: Response sent without markdown formatting but with keyboard")
                 except Exception as fallback_error:
                     logger.error(f"🔍 DEBUG: Fallback send also failed: {type(fallback_error).__name__}: {fallback_error}")
-                    raise send_error
+                    # Last resort - send without keyboard
+                    try:
+                        await update.message.reply_text(clean_instructions)
+                        logger.info(f"🔍 DEBUG: Response sent without markdown and without keyboard")
+                    except Exception as final_error:
+                        logger.error(f"🔍 DEBUG: All send attempts failed: {type(final_error).__name__}: {final_error}")
+                        raise send_error
         
     except Exception as main_error:
         error_type = type(main_error).__name__
