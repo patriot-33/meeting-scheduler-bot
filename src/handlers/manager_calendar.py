@@ -76,7 +76,8 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.info(f"🔍 DEBUG: Starting OAuth service import for user {user_id}")
             try:
                 from services.oauth_service import oauth_service
-                logger.info(f"🔍 DEBUG: OAuth service imported, is_configured: {oauth_service.is_oauth_configured}")
+                logger.info(f"🔍 DEBUG: OAuth service imported successfully")
+                logger.info(f"🔍 DEBUG: OAuth service is_configured: {oauth_service.is_oauth_configured}")
             
                 # Pre-check OAuth configuration 
                 if not oauth_service.is_oauth_configured:
@@ -138,9 +139,24 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.info(f"🔍 DEBUG: Response sent successfully to user {user_id}")
         
     except Exception as main_error:
-        logger.error(f"🔍 DEBUG: Exception in connect_calendar for user {user_id}: {type(main_error).__name__}: {main_error}")
+        error_type = type(main_error).__name__
+        logger.error(f"🔍 DEBUG: Exception in connect_calendar for user {user_id}: {error_type}: {main_error}")
         logger.error(f"🔍 DEBUG: Traceback: {traceback.format_exc()}")
-        raise main_error
+        
+        # Provide user-friendly error message instead of generic network error
+        try:
+            await update.message.reply_text(
+                f"❌ **Ошибка подключения календаря**\n\n"
+                f"Произошла техническая ошибка: `{error_type}`\n\n"
+                f"Обратитесь к администратору или попробуйте:\n"
+                f"• Команду `/calendar_simple` для простого подключения\n"
+                f"• Команду `/email ваш_email@gmail.com` для ручного добавления",
+                parse_mode='Markdown'
+            )
+        except Exception as reply_error:
+            logger.error(f"Failed to send error message to user {user_id}: {reply_error}")
+            # If we can't send a custom message, let the global error handler take over
+            raise main_error
 
 async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка callback для календаря."""
