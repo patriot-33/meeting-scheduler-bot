@@ -242,6 +242,14 @@ def main():
                 # Add webhook handler
                 app.router.add_post(settings.webhook_path, webhook_handler)
                 
+                # Add GET handler for webhook diagnostics
+                async def webhook_info_handler(request):
+                    return aio_web.Response(
+                        text="Webhook endpoint is working. Use POST for Telegram updates.",
+                        content_type='text/plain'
+                    )
+                app.router.add_get(settings.webhook_path, webhook_info_handler)
+                
                 # Add health check handler
                 app.router.add_get('/health', health_handler)
                 
@@ -255,6 +263,16 @@ def main():
                     allowed_updates=Update.ALL_TYPES
                 )
                 logger.info(f"✅ Webhook set: {webhook_full_url}")
+                
+                # Check webhook info
+                try:
+                    webhook_info = await application.bot.get_webhook_info()
+                    logger.info(f"🔗 WEBHOOK INFO: URL={webhook_info.url}")
+                    logger.info(f"🔗 WEBHOOK INFO: Pending updates={webhook_info.pending_update_count}")
+                    if webhook_info.last_error_message:
+                        logger.error(f"🔗 WEBHOOK ERROR: {webhook_info.last_error_message}")
+                except Exception as e:
+                    logger.error(f"Failed to get webhook info: {e}")
                 
                 # Start server
                 runner = aio_web.AppRunner(app)
