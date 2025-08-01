@@ -125,12 +125,11 @@ class DualCalendarCreator:
                         'responseStatus': 'needsAction'
                     }]
                 
-                # If we got a meet link from manager's event, reuse it
+                # If we got a meet link from manager's event, add it to description but keep conferenceData
                 if results['meet_link']:
-                    # Remove conferenceData to avoid creating new meet
-                    owner_event_data.pop('conferenceData', None)
-                    # Add meet link to description
+                    # Add meet link to description (keep conferenceData to ensure Google Meet is created)
                     owner_event_data['description'] += f"\n\nGoogle Meet: {results['meet_link']}"
+                    # Note: keeping conferenceData to ensure Google Meet functionality
                 
                 # Create event
                 owner_event = self._create_event_with_fallback(
@@ -192,3 +191,119 @@ class DualCalendarCreator:
         except Exception as e:
             logger.error(f"Failed to create event in {calendar_type}'s calendar: {e}")
             return None
+    
+    def delete_meeting_from_both_calendars(
+        self,
+        event_id: str,
+        manager_calendar_id: Optional[str] = None,
+        owner_calendar_id: Optional[str] = None,
+        manager_oauth_credentials: Optional[dict] = None,
+        owner_oauth_credentials: Optional[dict] = None
+    ) -> Dict[str, Any]:
+        """
+        Delete meeting from both manager and owner calendars using proper credentials.
+        
+        Args:
+            event_id: Google Calendar event ID
+            manager_calendar_id: Manager's calendar ID
+            owner_calendar_id: Owner's calendar ID
+            manager_oauth_credentials: Manager's OAuth credentials for their calendar
+            owner_oauth_credentials: Owner's OAuth credentials for their calendar
+        
+        Returns:
+            Dict with success status, deleted calendars count, and errors
+        """
+        results = {
+            'success': False,
+            'deleted_from_manager': False,
+            'deleted_from_owner': False,
+            'total_deleted': 0,
+            'errors': []
+        }
+        
+        # Delete from manager's calendar
+        if manager_calendar_id:
+            try:
+                success = self._delete_from_calendar(
+                    event_id, 
+                    manager_calendar_id, 
+                    "manager",
+                    manager_oauth_credentials
+                )
+                if success:
+                    results['deleted_from_manager'] = True
+                    results['total_deleted'] += 1
+                    logger.info(f"✅ Deleted event {event_id} from manager's calendar: {manager_calendar_id}")
+                else:
+                    results['errors'].append("Failed to delete from manager's calendar")
+            except Exception as e:
+                logger.error(f"Error deleting from manager's calendar: {e}")
+                results['errors'].append(f"Manager calendar deletion error: {str(e)}")
+        
+        # Delete from owner's calendar (if different from manager)
+        if owner_calendar_id and owner_calendar_id != manager_calendar_id:
+            try:
+                success = self._delete_from_calendar(
+                    event_id, 
+                    owner_calendar_id, 
+                    "owner",
+                    owner_oauth_credentials
+                )
+                if success:
+                    results['deleted_from_owner'] = True
+                    results['total_deleted'] += 1
+                    logger.info(f"✅ Deleted event {event_id} from owner's calendar: {owner_calendar_id}")
+                else:
+                    results['errors'].append("Failed to delete from owner's calendar")
+            except Exception as e:
+                logger.error(f"Error deleting from owner's calendar: {e}")
+                results['errors'].append(f"Owner calendar deletion error: {str(e)}")
+        
+        # Determine overall success
+        results['success'] = results['total_deleted'] > 0
+        
+        if results['success']:
+            logger.info(f"✅ Successfully deleted event from {results['total_deleted']} calendar(s)")
+        else:
+            logger.error(f"❌ Failed to delete event from any calendar. Errors: {results['errors']}")
+            
+        return results
+    
+    def _delete_from_calendar(
+        self, 
+        event_id: str, 
+        calendar_id: str, 
+        calendar_type: str,
+        oauth_credentials: Optional[dict] = None
+    ) -> bool:
+        """
+        Delete event from specific calendar using appropriate credentials.
+        
+        Args:
+            event_id: Google Calendar event ID
+            calendar_id: Calendar ID to delete from
+            calendar_type: "manager" or "owner" for logging
+            oauth_credentials: OAuth credentials for this specific calendar
+        
+        Returns:
+            True if deletion successful, False otherwise
+        """
+        try:
+            # If we have OAuth credentials for this specific calendar, use them
+            if oauth_credentials:
+                # TODO: Implement OAuth service creation for specific user
+                # For now, use the main service (this is a limitation we need to address)
+                logger.warning(f"Using main service for {calendar_type} calendar deletion - OAuth not yet implemented")
+            
+            # Delete using the main calendar service
+            self.calendar_service._service.events().delete(
+                calendarId=calendar_id,
+                eventId=event_id
+            ).execute()
+            
+            logger.info(f"✅ Successfully deleted event {event_id} from {calendar_type} calendar {calendar_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to delete event {event_id} from {calendar_type} calendar {calendar_id}: {e}")
+            return False
