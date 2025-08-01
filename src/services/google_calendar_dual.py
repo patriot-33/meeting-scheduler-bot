@@ -4,6 +4,7 @@ Creates meetings in both manager and owner calendars
 """
 import logging
 from datetime import datetime, timedelta
+from config import settings
 from typing import Optional, List, Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -82,8 +83,8 @@ class DualCalendarCreator:
             logger.info(f"Creating meeting in manager's calendar: {manager_calendar_id}")
             
             manager_event_data = base_event_data.copy()
-            # Add owner as optional attendee if email available
-            if owner_email:
+            # Add owner as optional attendee if email available and attendees are enabled
+            if owner_email and not settings.google_calendar_force_attendee_free:
                 manager_event_data['attendees'] = [{
                     'email': owner_email,
                     'displayName': owner_name,
@@ -115,8 +116,8 @@ class DualCalendarCreator:
                 logger.info(f"Creating meeting in owner's calendar: {owner_calendar_id}")
                 
                 owner_event_data = base_event_data.copy()
-                # Add manager as optional attendee if email available
-                if manager_email:
+                # Add manager as optional attendee if email available and attendees are enabled
+                if manager_email and not settings.google_calendar_force_attendee_free:
                     owner_event_data['attendees'] = [{
                         'email': manager_email,
                         'displayName': manager_name,
