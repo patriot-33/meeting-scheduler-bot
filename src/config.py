@@ -82,9 +82,9 @@ class Settings(BaseSettings):
         description="Try to create events with attendees (requires Domain-Wide Delegation)"
     )
     google_calendar_force_attendee_free: bool = Field(
-        default=True,   # По умолчанию включено для bulletproof режима
+        default=False,   # Изменено для поддержки Google Meet по умолчанию
         env="GOOGLE_CALENDAR_FORCE_ATTENDEE_FREE", 
-        description="Force creation of events without attendees (bulletproof mode)"
+        description="Force creation of events without attendees (bulletproof mode). Set to True to disable Google Meet."
     )
     
     # Logging

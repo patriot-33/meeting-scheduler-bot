@@ -225,23 +225,49 @@ class MeetingService:
             raise e
     
     def cancel_meeting(self, meeting_id: int) -> bool:
-        """Cancel a meeting."""
+        """Cancel a meeting from both calendars if applicable."""
         meeting = self.db.query(Meeting).filter(Meeting.id == meeting_id).first()
         if not meeting:
+            logger.error(f"Meeting {meeting_id} not found in database")
             return False
         
         try:
-            # Cancel in Google Calendar with saved calendar_id
-            self.calendar_service.cancel_meeting(meeting.google_event_id, meeting.google_calendar_id)
+            logger.info(f"🗑️ Cancelling meeting {meeting_id}: {meeting.google_event_id}")
             
-            # Update database
+            # Get manager information for dual calendar deletion
+            manager = self.db.query(User).filter(User.id == meeting.manager_id).first()
+            
+            # Try to delete from both calendars using DualCalendarCreator
+            deletion_results = self.dual_calendar_creator.delete_meeting_from_both_calendars(
+                event_id=meeting.google_event_id,
+                manager_calendar_id=manager.google_calendar_id if manager else None,
+                owner_calendar_id=meeting.google_calendar_id,  # This might be owner's calendar
+                manager_oauth_credentials=None,  # TODO: Implement OAuth credentials loading
+                owner_oauth_credentials=None    # TODO: Implement OAuth credentials loading
+            )
+            
+            # Log deletion results
+            if deletion_results['success']:
+                logger.info(f"✅ Successfully deleted meeting from {deletion_results['total_deleted']} calendar(s)")
+                if deletion_results['errors']:
+                    logger.warning(f"⚠️ Some deletion errors occurred: {deletion_results['errors']}")
+            else:
+                logger.error(f"❌ Failed to delete from any calendar: {deletion_results['errors']}")
+                # Fallback to original method
+                logger.info("🔄 Falling back to original deletion method")
+                self.calendar_service.cancel_meeting(meeting.google_event_id, meeting.google_calendar_id)
+            
+            # Update database regardless of calendar deletion success
             meeting.status = MeetingStatus.CANCELLED
             self.db.commit()
             
+            logger.info(f"✅ Meeting {meeting_id} marked as cancelled in database")
             return True
             
         except Exception as e:
-            logger.error(f"Failed to cancel meeting {meeting_id}: {e}")
+            logger.error(f"❌ Failed to cancel meeting {meeting_id}: {e}")
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
+            self.db.rollback()
             return False
     
     def get_user_meetings(self, user_id: int, future_only: bool = True) -> List[Meeting]:
