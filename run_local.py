@@ -11,19 +11,24 @@ from pathlib import Path
 # Добавляем src в путь
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from src.main import main
-
 def setup_local_environment():
     """Настройка локального окружения"""
     
-    # Загружаем .env файл если существует
-    env_file = Path(".env")
+    # Загружаем .env.dev файл для разработки
+    env_file = Path(".env.dev")
     if env_file.exists():
         from dotenv import load_dotenv
-        load_dotenv()
-        print("✅ Загружены переменные из .env")
+        load_dotenv(".env.dev")
+        print("✅ Загружены переменные из .env.dev (разработка)")
     else:
-        print("⚠️ Файл .env не найден, используются переменные окружения")
+        # Fallback к .env
+        env_file = Path(".env")
+        if env_file.exists():
+            from dotenv import load_dotenv
+            load_dotenv()
+            print("✅ Загружены переменные из .env")
+        else:
+            print("⚠️ Файлы .env.dev/.env не найдены, используются переменные окружения")
     
     # Проверяем обязательные переменные
     required_vars = ["TELEGRAM_BOT_TOKEN"]
@@ -60,6 +65,8 @@ def main_local():
     print("=" * 50)
     
     try:
+        # Импортируем main только после настройки окружения
+        from src.main import main
         # Запускаем бота
         asyncio.run(main())
     except KeyboardInterrupt:

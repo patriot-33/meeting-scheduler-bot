@@ -6,7 +6,7 @@ from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes
 from sqlalchemy.orm import Session
 from database import SessionLocal, User
-from services.owner_service import get_all_owners
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +24,7 @@ async def check_oauth_status(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return
             
         # Проверяем, является ли пользователь owner
-        owners = get_all_owners(session)
-        is_owner = any(owner.user_id == user_id for owner in owners)
+        is_owner = user_id in settings.admin_ids_list
         
         # Формируем отчет о статусе
         status_message = f"""

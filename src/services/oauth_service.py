@@ -218,6 +218,7 @@ class ManagerOAuthService:
                     user.oauth_credentials = credentials.to_json()
                     user.google_calendar_id = calendar_id
                     user.email = email
+                    user.calendar_connected = True
                     db.commit()
                     logger.info(f"Saved credentials for manager {telegram_id}")
                 else:

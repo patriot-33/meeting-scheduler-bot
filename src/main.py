@@ -1,6 +1,10 @@
 import logging
 import asyncio
 import traceback
+import sys
+import psutil
+import os
+from datetime import datetime
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -8,6 +12,7 @@ from telegram.ext import (
     CallbackQueryHandler,
     MessageHandler,
     ConversationHandler,
+    ContextTypes,
     filters,
 )
 from aiohttp import web
@@ -19,16 +24,42 @@ from handlers import registration, admin, manager, common, owner, manager_calend
 from services.reminder_service import ReminderService
 from utils.scheduler import setup_scheduler
 
-# Configure logging for small team
+# BULLETPROOF DIAGNOSTIC LOGGING
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=getattr(logging, settings.log_level),
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s',
     handlers=[
-        logging.StreamHandler(),  # Console output for render.com
-        logging.FileHandler('bot.log', encoding='utf-8') if settings.debug else logging.NullHandler()
+        logging.FileHandler('test_session.log', encoding='utf-8'),
+        logging.FileHandler('debug_session.log', encoding='utf-8'), 
+        logging.StreamHandler(sys.stdout)
     ]
 )
 logger = logging.getLogger(__name__)
+
+def log_system_state():
+    """Log system state for diagnostics"""
+    logger.info(f"🔍 SYSTEM STATE:")
+    logger.info(f"   CPU: {psutil.cpu_percent()}%")
+    logger.info(f"   Memory: {psutil.virtual_memory().percent}%")
+    logger.info(f"   Disk: {psutil.disk_usage('/').percent}%")
+    
+    # Try to get network connections, but handle permission issues on macOS
+    try:
+        connections_count = len(psutil.net_connections())
+        logger.info(f"   Active connections: {connections_count}")
+    except (psutil.AccessDenied, PermissionError) as e:
+        logger.info(f"   Active connections: Permission denied on macOS - {e}")
+    
+    logger.info(f"   Python version: {sys.version}")
+    logger.info(f"   Current time: {datetime.now()}")
+    logger.info(f"   Working directory: {os.getcwd()}")
+
+def debug_context(func_name, local_vars, step):
+    """Debug context logging"""
+    logger.debug(f"🔍 {func_name} - Step {step}")
+    for var_name, var_value in local_vars.items():
+        if var_name != 'self':  # Skip self references
+            logger.debug(f"   {var_name}: {type(var_value).__name__} = {str(var_value)[:100]}...")
 
 # Set third-party loggers to WARNING to reduce noise
 logging.getLogger('telegram').setLevel(logging.WARNING)
@@ -110,13 +141,18 @@ async def error_handler(update: Update, context):
         except Exception as e:
             logger.error(f"Failed to answer callback query for user {user_id}: {e}")
 
-def main():
-    """Start the bot."""
-    logger.info("🚀 Starting Meeting Scheduler Bot for team...")
+async def main():
+    """Start the bot with full diagnostics."""
+    logger.info("🚀 STARTING MEETING SCHEDULER BOT WITH FULL DIAGNOSTICS...")
+    
+    # 🔍 ДИАГНОСТИКА 1: SYSTEM STATE
+    log_system_state()
+    debug_context("main", {"startup_stage": "init"}, 1)
     
     # Health check before startup
     from utils.health_check import health_check
     health = health_check()
+    logger.info(f"🏥 HEALTH CHECK RESULT: {health}")
     if health['status'] != 'healthy':
         logger.error(f"❌ Health check failed: {health}")
         return
@@ -176,7 +212,7 @@ def main():
     application.add_handler(CallbackQueryHandler(admin.handle_admin_callback, pattern="^admin_"))
     application.add_handler(CallbackQueryHandler(owner.handle_owner_callback, pattern="^owner_"))
     # Note: manager booking callbacks are handled by get_manager_handlers() below
-    application.add_handler(CallbackQueryHandler(manager_calendar.handle_calendar_callback, pattern="^(send_email_to_owner|calendar_faq|connect_calendar|reconnect_calendar)$"))
+    application.add_handler(CallbackQueryHandler(manager_calendar.handle_calendar_callback, pattern="^(send_email_to_owner|calendar_faq|connect_calendar|reconnect_calendar|disconnect_calendar|connect_calendar_fresh)$"))
     application.add_handler(CallbackQueryHandler(owner.handle_owner_calendar_callback, pattern="^(connect_owner_calendar|reconnect_owner_calendar)$"))
     application.add_handler(CallbackQueryHandler(manager_calendar_simple.simple_calendar_faq, pattern="^simple_calendar_faq$"))
     application.add_handler(CallbackQueryHandler(lambda u, c: u.callback_query.answer("📋 Email скопирован!"), pattern="^copy_service_email:"))
@@ -198,7 +234,7 @@ def main():
     
     # Owner commands
     application.add_handler(CommandHandler("owner", owner.owner_menu))
-    application.add_handler(CommandHandler("calendar", owner.connect_owner_calendar))  # OAuth calendar for owners
+    # Removed duplicate calendar handler - using unified handler below
     
     # Manager commands - new improved handlers
     for handler in manager.get_manager_handlers():
@@ -220,8 +256,36 @@ def main():
             application.add_handler(CommandHandler(command_name, handler_function))
         except AttributeError:
             logger.debug(f"Manager command '{command_name}' not available - skipping")
-    # Calendar connection handlers - multiple options
-    application.add_handler(CommandHandler("calendar", manager_calendar.connect_calendar))  # OAuth method
+    # UNIFIED CALENDAR HANDLER - works for both owners and managers
+    async def unified_calendar_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Unified handler for /calendar command that works for both owners and managers."""
+        user_id = update.effective_user.id
+        
+        try:
+            from database import get_db, User, UserRole
+            with get_db() as db:
+                user = db.query(User).filter(User.telegram_id == user_id).first()
+                
+                if not user:
+                    await update.message.reply_text("❌ Вы не зарегистрированы в системе. Используйте /start")
+                    return
+                
+                # Route to appropriate handler based on user role
+                logger.info(f"🔍 DEBUG: unified_calendar_handler - User {user_id} has role {user.role.value}")
+                if user.role == UserRole.OWNER:
+                    logger.info(f"🔍 Routing /calendar to OWNER handler for user {user_id}")
+                    await owner.connect_owner_calendar(update, context)
+                elif user.role == UserRole.MANAGER:
+                    logger.info(f"🔍 Routing /calendar to MANAGER handler for user {user_id}")
+                    await manager_calendar.connect_calendar(update, context)
+                else:
+                    logger.warning(f"❌ Access denied: User {user_id} has role {user.role.value}, access only for OWNER/MANAGER")
+                    await update.message.reply_text("❌ Функция подключения календаря доступна только владельцам и руководителям.")
+        except Exception as e:
+            logger.error(f"Error in unified_calendar_handler: {e}")
+            await update.message.reply_text("❌ Произошла ошибка. Попробуйте позже.")
+    
+    application.add_handler(CommandHandler("calendar", unified_calendar_handler))  # Unified handler
     application.add_handler(CommandHandler("calendar_simple", manager_calendar_simple.simple_calendar_connect))  # Simple method
     application.add_handler(CommandHandler("calendar_instructions", manager_calendar_simple.simple_calendar_connect))  # Alias for simple method
     application.add_handler(CommandHandler("setcalendar", manager_calendar_simple.set_calendar_id))  # Set calendar ID
@@ -368,12 +432,28 @@ def main():
                     await application.shutdown()
             
             # Run the webhook server
-            asyncio.run(start_webhook_server())
+            await start_webhook_server()
             
         else:
             logger.info("🔄 Starting polling mode for development")
             # Polling mode for development
-            application.run_polling(allowed_updates=Update.ALL_TYPES)
+            await application.initialize()
+            await application.start()
+            
+            # Use update queues for polling
+            await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+            
+            try:
+                # Keep running
+                import asyncio
+                while True:
+                    await asyncio.sleep(1)
+            except KeyboardInterrupt:
+                logger.info("Shutting down...")
+            finally:
+                await application.updater.stop()
+                await application.stop()  
+                await application.shutdown()
     except Exception as e:
         logger.error(f"❌ Bot startup failed: {e}")
         try:
@@ -383,4 +463,5 @@ def main():
         raise
 
 if __name__ == '__main__':
-    main()
+    import asyncio
+    asyncio.run(main())

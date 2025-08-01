@@ -5,12 +5,16 @@ import logging
 import traceback
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
+from telegram.error import BadRequest
 
 from database import get_db, User, UserRole
 from utils.decorators import require_registration
+from utils.telegram_safe import safe_send_message, safe_context_send
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+# safe_send_message теперь импортируется из utils.telegram_safe
 
 @require_registration
 async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -18,28 +22,114 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     logger.info(f"🔍 DEBUG: connect_calendar started for user {user_id}")
     
+    # Defensive fix for UnboundLocalError: ensure get_db is explicitly available
+    from database import get_db as db_context_manager
+    
     try:
-        with get_db() as db:
+        with db_context_manager() as db:
             user = db.query(User).filter(User.telegram_id == user_id).first()
+            logger.info(f"🔍 DEBUG: User found - ID: {user.telegram_id}, role: {user.role.value}, calendar: {user.google_calendar_id}")
             
             if user.role != UserRole.MANAGER:
-                await update.message.reply_text(
-                    "❌ Данная функция доступна только руководителям отделов."
-                )
+                logger.warning(f"❌ DEBUG: Access denied - user role is {user.role.value}, expected MANAGER")
+                await safe_send_message(update, "❌ Данная функция доступна только руководителям отделов.")
                 return
             
-            # Check if calendar is already connected
+            # Check calendar connection status
+            calendar_status = "❌ Не подключен"
+            status_icon = "🔴"
+            status_details = ""
+            
             if user.oauth_credentials and user.google_calendar_id:
-                await update.message.reply_text(
-                    f"✅ **Google Calendar уже подключен!**\n\n"
-                    f"📧 Календарь: {user.email}\n"
-                    f"🎉 Вы можете планировать встречи командой /schedule\n\n"
-                    f"Чтобы переподключить календарь, нажмите кнопку ниже.",
-                    reply_markup=InlineKeyboardMarkup([
+                # Проверим реальный доступ к календарю
+                from services.google_calendar import google_calendar_service as calendar_service
+                calendar_access_test = None
+                
+                if calendar_service.is_available:
+                    try:
+                        calendar_access_test = calendar_service.test_calendar_access(user.google_calendar_id)
+                    except Exception as e:
+                        logger.warning(f"Failed to test calendar access: {e}")
+                
+                if calendar_access_test and calendar_access_test['success']:
+                    calendar_status = "✅ Подключен"
+                    status_icon = "🟢"
+                    status_details = f"\n📧 Email: {user.email or 'не указан'}\n📅 Calendar ID: {user.google_calendar_id[:30]}...\n🎨 Название: {calendar_access_test.get('summary', 'N/A')}"
+                    
+                    # Обновляем статус в БД, если он был неправильным
+                    if not user.calendar_connected:
+                        user.calendar_connected = True
+                        # Сохраняем в контексте транзакции (db уже открыт в текущем контексте)
+                        try:
+                            # commit будет автоматически при выходе из with get_db()
+                            pass
+                        except:
+                            pass
+                elif calendar_access_test and not calendar_access_test['success']:
+                    calendar_status = "❌ Нет доступа к календарю"
+                    status_icon = "🔴"
+                    error_msg = calendar_access_test.get('error', 'Unknown error')
+                    if 'not found' in error_msg.lower():
+                        status_details = f"\n📧 Email: {user.email or 'не указан'}\n📅 Calendar ID: {user.google_calendar_id}\n❌ Календарь не найден или не предоставлен доступ\n\n💡 **Требуется настройка доступа:**\n1. Откройте Google Calendar\n2. Поделитесь календарем с:\n   `meeting-bot-service@meeting-scheduler-bot-467415.iam.gserviceaccount.com`\n3. Установите права: 'Вносить изменения'"
+                    else:
+                        status_details = f"\n📧 Email: {user.email or 'не указан'}\n📅 Calendar ID: {user.google_calendar_id}\n❌ Ошибка доступа: {error_msg}"
+                    
+                    # Обновляем статус в БД
+                    if user.calendar_connected:
+                        user.calendar_connected = False
+                else:
+                    calendar_status = "⚠️ Требуется переподключение"
+                    status_icon = "🟡"
+                    status_details = "\n❗ Обнаружены сохраненные данные, но статус подключения неизвестен\n💡 Попробуйте переподключить календарь"
+            elif user.email:
+                status_details = f"\n📧 Email сохранен: {user.email}\n⏳ Ожидает подключения через OAuth"
+                
+            status_message = f"""📊 **Статус Google Calendar**
+
+{status_icon} Статус: {calendar_status}{status_details}
+
+💡 Для планирования встреч необходим подключенный календарь."""
+            
+            # Show different buttons based on REAL connection status
+            calendar_really_connected = (calendar_access_test and calendar_access_test['success']) if 'calendar_access_test' in locals() else user.calendar_connected
+            
+            if calendar_really_connected:
+                keyboard = [
+                    [InlineKeyboardButton("📅 Запланировать встречу", callback_data="schedule_meeting")],
+                    [InlineKeyboardButton("🔄 Переподключить календарь", callback_data="reconnect_calendar")],
+                    [InlineKeyboardButton("🗑 Отключить календарь", callback_data="disconnect_calendar")],
+                    [InlineKeyboardButton("❓ Частые вопросы", callback_data="calendar_faq")]
+                ]
+                await safe_send_message(
+                    update,
+                    status_message,
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                return
+            elif user.oauth_credentials:
+                # Has credentials but not connected - different options based on problem
+                if 'calendar_access_test' in locals() and calendar_access_test and not calendar_access_test['success']:
+                    # Calendar exists but no access - sharing problem
+                    keyboard = [
+                        [InlineKeyboardButton("📋 Инструкция по настройке доступа", callback_data="calendar_sharing_guide")],
+                        [InlineKeyboardButton("📅 Использовать простое подключение", callback_data="switch_to_simple_calendar")],
+                        [InlineKeyboardButton("🔄 Переподключить через OAuth", callback_data="reconnect_calendar")],
+                        [InlineKeyboardButton("🗑 Очистить данные", callback_data="disconnect_calendar")]
+                    ]
+                    extra_message = "\n\n❌ **Нет доступа к календарю**\nТребуется настроить доступ или использовать другой метод подключения."
+                else:
+                    # General reconnection needed
+                    keyboard = [
                         [InlineKeyboardButton("🔄 Переподключить календарь", callback_data="reconnect_calendar")],
-                        [InlineKeyboardButton("📅 Запланировать встречу", callback_data="schedule_meeting")]
-                    ]),
-                    parse_mode='Markdown'
+                        [InlineKeyboardButton("🆕 Подключить заново", callback_data="connect_calendar_fresh")],
+                        [InlineKeyboardButton("❓ Частые вопросы", callback_data="calendar_faq")]
+                    ]
+                    extra_message = "\n\n⚠️ **Требуется переподключение календаря**"
+                
+                await safe_send_message(
+                    update,
+                    status_message + extra_message,
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 )
                 return
             
@@ -146,7 +236,7 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.info(f"🔍 DEBUG: Keyboard buttons count: {len(keyboard)}")
             
             try:
-                await update.message.reply_text(
+                await safe_send_message(update,
                     instructions, 
                     reply_markup=reply_markup,
                     parse_mode='Markdown'
@@ -157,7 +247,7 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Try sending without markdown formatting but keep the keyboard
                 try:
                     clean_instructions = instructions.replace('**', '').replace('`', '').replace('*', '')
-                    await update.message.reply_text(
+                    await safe_send_message(update,
                         clean_instructions,
                         reply_markup=reply_markup
                     )
@@ -166,7 +256,7 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     logger.error(f"🔍 DEBUG: Fallback send also failed: {type(fallback_error).__name__}: {fallback_error}")
                     # Last resort - send without keyboard
                     try:
-                        await update.message.reply_text(clean_instructions)
+                        await safe_send_message(update,clean_instructions)
                         logger.info(f"🔍 DEBUG: Response sent without markdown and without keyboard")
                     except Exception as final_error:
                         logger.error(f"🔍 DEBUG: All send attempts failed: {type(final_error).__name__}: {final_error}")
@@ -179,7 +269,7 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Provide user-friendly error message instead of generic network error
         try:
-            await update.message.reply_text(
+            await safe_send_message(update,
                 f"❌ **Ошибка подключения календаря**\n\n"
                 f"Произошла техническая ошибка: `{error_type}`\n\n"
                 f"Обратитесь к администратору или попробуйте:\n"
@@ -198,28 +288,24 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
     
     if query.data == "connect_calendar":
-        # Перенаправляем на основную функцию подключения
-        # Создаем фиктивный update объект для команды
-        fake_update = type('obj', (object,), {
-            'effective_user': query.from_user,
-            'message': type('obj', (object,), {
-                'reply_text': query.edit_message_text
-            })()
-        })()
-        await connect_calendar(fake_update, context)
+        # Используем обычный update с callback_query
+        await connect_calendar(update, context)
     elif query.data == "reconnect_calendar":
         # Переподключение календаря
-        fake_update = type('obj', (object,), {
-            'effective_user': query.from_user,
-            'message': type('obj', (object,), {
-                'reply_text': query.edit_message_text
-            })()
-        })()
-        await connect_calendar(fake_update, context)
+        await connect_calendar(update, context)
     elif query.data == "send_email_to_owner":
         await send_email_prompt(update, context)
     elif query.data == "calendar_faq":
         await show_calendar_faq(update, context)
+    elif query.data == "disconnect_calendar":
+        await disconnect_calendar_handler(update, context)
+    elif query.data == "connect_calendar_fresh":
+        # Same as connect_calendar but force fresh connection
+        await connect_calendar(update, context)
+    elif query.data == "calendar_sharing_guide":
+        await show_calendar_sharing_guide(update, context)
+    elif query.data == "switch_to_simple_calendar":
+        await switch_to_simple_calendar(update, context)
 
 async def send_email_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Запрос email для отправки владельцу."""
@@ -238,7 +324,7 @@ async def send_email_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("← Назад", callback_data="connect_calendar")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.callback_query.edit_message_text(
+    await safe_send_message(update,
         text,
         reply_markup=reply_markup,
         parse_mode='Markdown'
@@ -247,7 +333,7 @@ async def send_email_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def save_manager_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Сохранить email менеджера и уведомить владельца."""
     if not context.args:
-        await update.message.reply_text(
+        await safe_send_message(update,
             "❌ Укажите email после команды.\n"
             "Пример: `/email john.doe@gmail.com`",
             parse_mode='Markdown'
@@ -258,7 +344,7 @@ async def save_manager_email(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     # Простая проверка email
     if '@' not in email or '.' not in email.split('@')[1]:
-        await update.message.reply_text(
+        await safe_send_message(update,
             "❌ Неверный формат email.\n"
             "Пример: `john.doe@gmail.com`",
             parse_mode='Markdown'
@@ -267,11 +353,13 @@ async def save_manager_email(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     user_id = update.effective_user.id
     
-    with get_db() as db:
+    # Defensive fix for potential UnboundLocalError
+    from database import get_db as db_context_manager
+    with db_context_manager() as db:
         user = db.query(User).filter(User.telegram_id == user_id).first()
         
         if not user or user.role != UserRole.MANAGER:
-            await update.message.reply_text("❌ Функция доступна только руководителям.")
+            await safe_send_message(update,"❌ Функция доступна только руководителям.")
             return
         
         # Сохраняем email
@@ -294,7 +382,8 @@ async def save_manager_email(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         for owner in owners:
             try:
-                await context.bot.send_message(
+                await safe_context_send(
+                    context,
                     chat_id=owner.telegram_id,
                     text=notification_text,
                     parse_mode='Markdown'
@@ -302,7 +391,7 @@ async def save_manager_email(update: Update, context: ContextTypes.DEFAULT_TYPE)
             except Exception as e:
                 logger.error(f"Failed to notify owner {owner.id}: {e}")
     
-    await update.message.reply_text(
+    await safe_send_message(update,
         f"✅ Email сохранен: `{email}`\n\n"
         f"Владельцы получили уведомление и добавят вас в календарь.\n"
         f"Вы получите приглашение на указанную почту.",
@@ -342,8 +431,109 @@ A: Убедитесь, что приняли приглашение в пись�
     keyboard = [[InlineKeyboardButton("← Назад", callback_data="connect_calendar")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.callback_query.edit_message_text(
+    await safe_send_message(update,
         faq_text,
         reply_markup=reply_markup,
         parse_mode='Markdown'
     )
+
+async def disconnect_calendar_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отключить календарь."""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    
+    # Defensive fix for potential UnboundLocalError
+    from database import get_db as db_context_manager
+    with db_context_manager() as db:
+        user = db.query(User).filter(User.telegram_id == user_id).first()
+        
+        if user and user.role == UserRole.MANAGER:
+            # Clear calendar connection
+            user.oauth_credentials = None
+            user.google_calendar_id = None
+            user.calendar_connected = False
+            db.commit()
+            
+            await safe_send_message(update,
+                "✅ **Календарь отключен**\n\n"
+                "Ваши данные Google Calendar были удалены из системы.\n"
+                "Вы можете подключить календарь заново в любое время командой /calendar",
+                parse_mode='Markdown'
+            )
+        else:
+            await safe_send_message(update,"❌ Ошибка при отключении календаря")
+
+async def show_calendar_sharing_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать подробную инструкцию по настройке доступа к календарю."""
+    from services.google_calendar import google_calendar_service as calendar_service
+    service_email = calendar_service.get_service_account_email() or "service-account@example.com"
+    
+    guide_text = f"""
+📋 **Инструкция по настройке доступа к календарю**
+
+Ваш календарь найден, но у бота нет доступа к нему.
+
+🔧 **Пошаговая настройка:**
+
+1️⃣ **Откройте Google Calendar**
+   • Перейдите на https://calendar.google.com
+   • Найдите нужный календарь в левой панели
+
+2️⃣ **Откройте настройки календаря**
+   • Нажмите на 3 точки рядом с календарем
+   • Выберите "Настройки и общий доступ"
+
+3️⃣ **Добавьте доступ боту**
+   • В разделе "Предоставить доступ определенным пользователям"
+   • Нажмите "+ Добавить пользователей"
+   • Введите email бота:
+   
+   📧 `{service_email}`
+   
+   • Установите разрешения: **"Вносить изменения"**
+   • Нажмите "Отправить"
+
+4️⃣ **Проверка**
+   • Вернитесь в бот
+   • Нажмите /calendar для проверки статуса
+
+🔒 **Безопасность:**
+• Бот получит доступ только к указанному календарю
+• Вы можете отозвать доступ в любой момент
+• Доступ используется только для создания встреч
+
+❓ **Альтернативы:**
+• Используйте простое подключение: /calendar_simple
+• Переподключитесь через OAuth заново
+"""
+    
+    keyboard = [
+        [InlineKeyboardButton("📋 Копировать email бота", callback_data=f"copy_service_email:{service_email}")],
+        [InlineKeyboardButton("🔄 Проверить доступ", callback_data="connect_calendar")],
+        [InlineKeyboardButton("📅 Простое подключение", callback_data="switch_to_simple_calendar")],
+        [InlineKeyboardButton("← Назад", callback_data="connect_calendar")]
+    ]
+    
+    await safe_send_message(update, guide_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def switch_to_simple_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Переключиться на простое подключение календаря."""
+    from handlers.manager_calendar_simple import simple_calendar_connect
+    
+    # Очистим старые OAuth данные
+    user_id = update.effective_user.id
+    
+    # Defensive fix for potential UnboundLocalError
+    from database import get_db as db_context_manager
+    with db_context_manager() as db:
+        user = db.query(User).filter(User.telegram_id == user_id).first()
+        if user:
+            user.oauth_credentials = None
+            user.calendar_connected = False
+            # Сохраняем google_calendar_id если есть
+            db.commit()
+    
+    # Показываем инструкцию для простого подключения
+    await simple_calendar_connect(update, context)

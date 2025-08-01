@@ -520,41 +520,84 @@ class GoogleCalendarService:
             logger.error("No event ID provided for cancellation")
             return False
         
-        # Find the calendar that has this event
+        # Find the calendar that has this event  
         if not calendar_id:
-            logger.info(f"🔍 CANCEL: Searching for event {event_id} in connected calendars")
+            logger.info(f"🔍 CANCEL: Searching for event {event_id} in all available calendars")
+            from config import settings
             from database import get_db, User
             
-            with get_db() as db:
-                oauth_users = db.query(User).filter(
-                    User.oauth_credentials.isnot(None),
-                    User.google_calendar_id.isnot(None)
-                ).all()
-                
-                for user in oauth_users:
+            # First check Service Account calendars (primary and secondary)
+            service_calendars = [
+                settings.google_calendar_id_1,
+                settings.google_calendar_id_2
+            ]
+            
+            for cal_id in service_calendars:
+                if cal_id:
                     try:
-                        # Try to get event from this calendar
+                        # Try to get event from Service Account calendar
                         self._service.events().get(
-                            calendarId=user.google_calendar_id,
+                            calendarId=cal_id,
                             eventId=event_id
                         ).execute()
-                        calendar_id = user.google_calendar_id
-                        logger.info(f"✅ CANCEL: Found event in {user.first_name}'s calendar: {calendar_id}")
+                        calendar_id = cal_id
+                        logger.info(f"✅ CANCEL: Found event in Service Account calendar: {calendar_id}")
                         break
-                    except Exception:
+                    except Exception as e:
+                        logger.debug(f"Event not found in {cal_id}: {e}")
                         continue
+            
+            # If not found in Service Account calendars, check OAuth calendars
+            if not calendar_id:
+                with get_db() as db:
+                    oauth_users = db.query(User).filter(
+                        User.oauth_credentials.isnot(None),
+                        User.google_calendar_id.isnot(None)
+                    ).all()
+                    
+                    for user in oauth_users:
+                        try:
+                            # Try to get event from OAuth calendar
+                            self._service.events().get(
+                                calendarId=user.google_calendar_id,
+                                eventId=event_id
+                            ).execute()
+                            calendar_id = user.google_calendar_id
+                            logger.info(f"✅ CANCEL: Found event in {user.first_name}'s calendar: {calendar_id}")
+                            break
+                        except Exception as e:
+                            logger.debug(f"Event not found in {user.google_calendar_id}: {e}")
+                            continue
         
         if not calendar_id:
             logger.error(f"❌ CANCEL: Event {event_id} not found in any connected calendar")
             return False
         
         try:
-            # Delete the event from Google Calendar
+            # Delete the event from the found calendar
             self._service.events().delete(
                 calendarId=calendar_id,
                 eventId=event_id
             ).execute()
             logger.info(f"✅ CANCEL: Event {event_id} deleted from calendar {calendar_id}")
+            
+            # Try to delete from other calendars too (in case it was created in multiple calendars)
+            from config import settings
+            all_calendars = [
+                settings.google_calendar_id_1,
+                settings.google_calendar_id_2
+            ]
+            
+            for cal_id in all_calendars:
+                if cal_id and cal_id != calendar_id:
+                    try:
+                        self._service.events().delete(
+                            calendarId=cal_id,
+                            eventId=event_id
+                        ).execute()
+                        logger.info(f"✅ CANCEL: Also deleted event {event_id} from calendar {cal_id}")
+                    except Exception as e:
+                        logger.debug(f"Event {event_id} not found in {cal_id} or already deleted: {e}")
             
             logger.info(f"Successfully cancelled Google Calendar event: {event_id}")
             return True
