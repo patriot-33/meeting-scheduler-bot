@@ -1,0 +1,124 @@
+{
+  "session_info": {
+    "session_date": "2025-08-01T15:40:00.000000",
+    "deployment_platform": "Render.com",
+    "github_repo": "https://github.com/patriot-33/meeting-scheduler-bot",
+    "total_bugs_fixed": 2,
+    "severity_distribution": {
+      "critical": 1,
+      "high": 1
+    }
+  },
+  "bugs_detailed": [
+    {
+      "bug_id": "CONFIG_MISSING_005",
+      "timestamp": "2025-08-01T12:19:49Z",
+      "title": "Missing required config on initial deployment",
+      "severity": "CRITICAL",
+      "description": "Bot failed to start due to missing environment variables TELEGRAM_BOT_TOKEN and ADMIN_TELEGRAM_IDS",
+      "root_cause": "Environment variables were not set in Render.com dashboard",
+      "symptoms": [
+        "Health check failed: {'status': 'unhealthy', 'checks': {..., 'config': {'status': False, 'message': 'Missing required config'}}}",
+        "Application exited early",
+        "Bot couldn't start"
+      ],
+      "diagnostic_steps": [
+        "1. Checked deployment logs - found 'Missing required config' error",
+        "2. Analyzed health_check.py - requires TELEGRAM_BOT_TOKEN and ADMIN_TELEGRAM_IDS",
+        "3. Verified that database was OK but config was missing",
+        "4. Identified missing environment variables in Render"
+      ],
+      "fix_applied": {
+        "description": "Added required environment variables to Render.com dashboard",
+        "environment_variables_added": [
+          "TELEGRAM_BOT_TOKEN",
+          "ADMIN_TELEGRAM_IDS",
+          "GOOGLE_SERVICE_ACCOUNT_JSON",
+          "GOOGLE_OAUTH_CLIENT_JSON",
+          "GOOGLE_CALENDAR_ID_1",
+          "GOOGLE_CALENDAR_ID_2"
+        ],
+        "platform_action": "Manual configuration in Render.com Settings → Environment"
+      },
+      "verification": "Bot started successfully after adding variables",
+      "impact": "Critical - bot couldn't start without these variables",
+      "time_to_fix": "~5 minutes",
+      "prevention": "Always verify all required environment variables are set before deployment"
+    },
+    {
+      "bug_id": "GOOGLE_CALENDAR_ATTENDEES_006",
+      "timestamp": "2025-08-01T12:30:30Z",
+      "title": "Invalid attendee email error when creating Google Calendar events",
+      "severity": "HIGH",
+      "description": "Google Calendar API returned 'Invalid attendee email' and 'Service accounts cannot invite attendees without Domain-Wide Delegation' errors",
+      "root_cause": "Code was trying to add attendees to calendar events despite GOOGLE_CALENDAR_FORCE_ATTENDEE_FREE=true setting",
+      "symptoms": [
+        "Failed to create event in manager's calendar: <HttpError 400 'Invalid attendee email'>",
+        "Failed to create event in owner's calendar: <HttpError 403 'Service accounts cannot invite attendees'>",
+        "Meeting creation failed completely",
+        "Users couldn't book meetings"
+      ],
+      "diagnostic_steps": [
+        "1. Analyzed error logs - found Google Calendar API errors",
+        "2. Added GOOGLE_CALENDAR_FORCE_ATTENDEE_FREE=true to environment",
+        "3. Error persisted - code wasn't checking this setting",
+        "4. Found attendees being added in google_calendar_dual.py lines 87-92 and 120-125",
+        "5. Code was ignoring the environment variable setting"
+      ],
+      "fix_applied": {
+        "description": "Modified google_calendar_dual.py to check settings.google_calendar_force_attendee_free before adding attendees",
+        "files_modified": [
+          "src/services/google_calendar_dual.py"
+        ],
+        "code_changes": [
+          {
+            "file": "src/services/google_calendar_dual.py",
+            "change": "Added condition to check settings.google_calendar_force_attendee_free",
+            "before": "if owner_email:",
+            "after": "if owner_email and not settings.google_calendar_force_attendee_free:",
+            "lines": ["87", "120"]
+          }
+        ],
+        "commit": "5b1e27c"
+      },
+      "verification": "After deployment, events should create without attendees errors",
+      "impact": "High - users couldn't book any meetings",
+      "time_to_fix": "~20 minutes (including diagnosis)",
+      "prevention": "Ensure all environment variable checks are properly implemented in code",
+      "lessons_learned": [
+        "Environment variables must be both set AND checked in code",
+        "Google Calendar API has strict requirements for attendees",
+        "Service accounts have limitations without Domain-Wide Delegation",
+        "Always test calendar integration with actual API calls"
+      ]
+    }
+  ],
+  "deployment_summary": {
+    "initial_deployment_time": "2025-08-01T12:19:00Z",
+    "final_success_time": "2025-08-01T12:23:28Z",
+    "total_deployment_duration": "~25 minutes including fixes",
+    "current_status": "DEPLOYED AND RUNNING",
+    "service_url": "https://meeting-scheduler-bot-fkp8.onrender.com",
+    "health_endpoint": "https://meeting-scheduler-bot-fkp8.onrender.com/health",
+    "webhook_status": "Active and receiving updates"
+  },
+  "patterns_analysis": {
+    "common_deployment_issues": [
+      "Environment variables not set in deployment platform",
+      "Code assumptions not matching runtime configuration",
+      "External API limitations not properly handled"
+    ],
+    "deployment_checklist": [
+      "Verify ALL environment variables are set",
+      "Test with actual external APIs (not just mocks)",
+      "Check that code respects environment variable settings",
+      "Monitor logs during first user interactions"
+    ]
+  },
+  "follow_up_actions": [
+    "Monitor bot performance over next 24 hours",
+    "Verify Google Calendar events are being created properly",
+    "Check that users can successfully book meetings",
+    "Consider implementing better error messages for users"
+  ]
+}
