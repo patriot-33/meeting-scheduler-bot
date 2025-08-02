@@ -4,21 +4,21 @@
       "name": "fix_conference_type",
       "description": "Fix conference type from eventHangout to hangoutsMeet",
       "file": "src/services/google_calendar_dual.py",
-      "timestamp": "2025-08-02T16:46:58.867463"
+      "timestamp": "2025-08-02T18:35:02.245448"
     },
     {
       "name": "fix_service_account_attendees",
       "description": "Add condition to skip attendees for Service Account calendars",
       "file": "src/services/google_calendar_dual.py",
-      "timestamp": "2025-08-02T16:46:58.867855"
+      "timestamp": "2025-08-02T18:35:02.245871"
     },
     {
       "name": "improve_oauth_detection",
       "description": "Improve OAuth detection with refresh_token validation",
       "file": "src/services/google_calendar_dual.py",
-      "timestamp": "2025-08-02T16:46:58.868161"
+      "timestamp": "2025-08-02T18:35:02.246206"
     }
   ],
   "failed_fixes": [],
-  "backup_location": "/Users/evgenii/meeting-scheduler-bot/.fix_backups/20250802_164658"
+  "backup_location": "/Users/evgenii/meeting-scheduler-bot/.fix_backups/20250802_183502"
 }
