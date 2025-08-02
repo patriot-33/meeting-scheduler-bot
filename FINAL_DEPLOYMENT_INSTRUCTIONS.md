@@ -32,8 +32,8 @@ Render will automatically detect the configuration from `render.yaml`, but verif
 
 #### Required Variables (Copy from your local .env)
 ```bash
-TELEGRAM_BOT_TOKEN=8318735096:AAHgCiDHTyyF-NfzQnSbAM3u5Hs4MirXfMs
-ADMIN_TELEGRAM_IDS=99006770
+TELEGRAM_BOT_TOKEN=YOUR_BOT_TOKEN_HERE
+ADMIN_TELEGRAM_IDS=YOUR_ADMIN_TELEGRAM_ID
 ```
 
 #### Google Calendar Configuration
@@ -44,8 +44,8 @@ GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"your-project
 # Google OAuth Client JSON (получить из Google Cloud Console)
 GOOGLE_OAUTH_CLIENT_JSON={"web":{"client_id":"your-client-id.apps.googleusercontent.com",...}}
 
-GOOGLE_CALENDAR_ID_1=plantatorbob@gmail.com
-GOOGLE_CALENDAR_ID_2=plantatorbob@gmail.com
+GOOGLE_CALENDAR_ID_1=your-calendar@gmail.com
+GOOGLE_CALENDAR_ID_2=your-calendar@gmail.com
 ```
 
 #### Application Configuration
