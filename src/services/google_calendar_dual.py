@@ -61,14 +61,6 @@ class DualCalendarCreator:
                 'dateTime': end_time.isoformat(),
                 'timeZone': 'Europe/Moscow',
             },
-            'conferenceData': {
-                'createRequest': {
-                    'requestId': f"meet-{int(datetime.now().timestamp())}-{abs(hash(manager_calendar_id))}",
-                    'conferenceSolutionKey': {
-                        'type': 'hangoutsMeet'
-                    }
-                }
-            },
             'reminders': {
                 'useDefault': False,
                 'overrides': [
@@ -78,22 +70,41 @@ class DualCalendarCreator:
             },
         }
         
+        # Add conference data with correct type
+        conference_request_id = f"meet-{int(datetime.now().timestamp())}-{abs(hash(manager_calendar_id))}"
+        base_event_data['conferenceData'] = {
+            'createRequest': {
+                'requestId': conference_request_id,
+                'conferenceSolutionKey': {
+                    'type': 'hangoutsMeet'  # Use hangoutsMeet for Service Account, will be changed for OAuth
+                }
+            }
+        }
+        
         # 1. Create in manager's calendar
         try:
             logger.info(f"Creating meeting in manager's calendar: {manager_calendar_id}")
             
             manager_event_data = base_event_data.copy()
-            # Add owner as optional attendee if email available (OAuth calendars support attendees)
-            if owner_email and self._is_valid_email(owner_email):
+            # Only add attendees for OAuth calendars
+            is_manager_oauth = self._is_oauth_calendar(manager_calendar_id)
+            
+            # Adjust conference type based on calendar type
+            if is_manager_oauth:
+                manager_event_data['conferenceData']['createRequest']['conferenceSolutionKey']['type'] = 'eventHangout'
+            
+            if is_manager_oauth and owner_email and self._is_valid_email(owner_email):
                 manager_event_data['attendees'] = [{
                     'email': owner_email,
                     'displayName': owner_name,
                     'optional': True,
                     'responseStatus': 'needsAction'
                 }]
-                logger.info(f"Adding owner {owner_name} ({owner_email}) as attendee to manager's calendar")
-            elif owner_email and not self._is_valid_email(owner_email):
+                logger.info(f"Adding owner {owner_name} ({owner_email}) as attendee to manager's OAuth calendar")
+            elif is_manager_oauth and owner_email and not self._is_valid_email(owner_email):
                 logger.warning(f"⚠️ Invalid owner email '{owner_email}' - creating meeting without owner as attendee")
+            elif not is_manager_oauth:
+                logger.info(f"🔒 Manager calendar is Service Account - not adding attendees")
             
             # Create event
             manager_event = self._create_event_with_fallback(
@@ -120,17 +131,25 @@ class DualCalendarCreator:
                 logger.info(f"Creating meeting in owner's calendar: {owner_calendar_id}")
                 
                 owner_event_data = base_event_data.copy()
-                # Add manager as optional attendee if email available (OAuth calendars support attendees)
-                if manager_email and self._is_valid_email(manager_email):
+                # Only add attendees for OAuth calendars
+                is_owner_oauth = self._is_oauth_calendar(owner_calendar_id)
+                
+                # Adjust conference type based on calendar type
+                if is_owner_oauth:
+                    owner_event_data['conferenceData']['createRequest']['conferenceSolutionKey']['type'] = 'eventHangout'
+                
+                if is_owner_oauth and manager_email and self._is_valid_email(manager_email):
                     owner_event_data['attendees'] = [{
                         'email': manager_email,
                         'displayName': manager_name,
                         'optional': True,
                         'responseStatus': 'needsAction'
                     }]
-                    logger.info(f"Adding manager {manager_name} ({manager_email}) as attendee to owner's calendar")
-                elif manager_email and not self._is_valid_email(manager_email):
+                    logger.info(f"Adding manager {manager_name} ({manager_email}) as attendee to owner's OAuth calendar")
+                elif is_owner_oauth and manager_email and not self._is_valid_email(manager_email):
                     logger.warning(f"⚠️ Invalid manager email '{manager_email}' - creating meeting without manager as attendee")
+                elif not is_owner_oauth:
+                    logger.info(f"🔒 Owner calendar is Service Account - not adding attendees")
                 
                 # If we got a meet link from manager's event, add it to description but keep conferenceData
                 if results['meet_link']:
@@ -223,13 +242,7 @@ class DualCalendarCreator:
     def _is_oauth_calendar(self, calendar_id: str) -> bool:
         """Detect if calendar is OAuth-based vs Service Account based."""
         try:
-            # OAuth calendars typically have email format, Service Account calendars have different patterns
-            # This is a heuristic - we could also check the current service credentials
-            if '@' in calendar_id and 'gmail.com' in calendar_id:
-                return True
-            
-            # Additional check: try to determine from calendar service type
-            # If we're using OAuth credentials, it's likely OAuth
+            # IMPORTANT: Check database FIRST to determine if user connected via OAuth
             from database import get_db, User, UserRole
             with get_db() as db:
                 oauth_user = db.query(User).filter(
@@ -241,7 +254,8 @@ class DualCalendarCreator:
                     logger.info(f"🔍 Calendar {calendar_id} detected as OAuth (user: {oauth_user.first_name})")
                     return True
             
-            logger.info(f"🔍 Calendar {calendar_id} detected as Service Account")
+            # If not found in OAuth users, it's a Service Account calendar
+            logger.info(f"🔍 Calendar {calendar_id} detected as Service Account (not found in OAuth users)")
             return False
             
         except Exception as e:
