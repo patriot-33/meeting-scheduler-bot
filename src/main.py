@@ -398,6 +398,14 @@ async def main():
                 # Wait a bit for server to be ready
                 await asyncio.sleep(2)
                 
+                # Clear any existing webhook first to avoid conflicts
+                try:
+                    await application.bot.delete_webhook(drop_pending_updates=True)
+                    logger.info("🗑️ Cleared existing webhook")
+                    await asyncio.sleep(1)  # Give it a moment
+                except Exception as e:
+                    logger.warning(f"Failed to clear webhook: {e}")
+                
                 # THEN set webhook with Telegram
                 await application.bot.set_webhook(
                     url=webhook_full_url,
