@@ -1,0 +1,111 @@
+{
+  "timestamp": "2025-08-02T10:35:00",
+  "problem": "4 события создается вместо 1-2",
+  "analysis": {
+    "entry_points": [
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/handlers/manager.py",
+        "line": 592,
+        "code": "meeting = meeting_service.create_meeting(user.id, meeting_datetime)",
+        "type": "handler_entry"
+      }
+    ],
+    "creation_calls": [
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/services/meeting_service.py",
+        "line": 126,
+        "code": "result = self.dual_calendar_creator.create_meeting_in_both_calendars(",
+        "context": {
+          "before": [
+            "                    # Use manager's calendar if available, otherwise use owner's",
+            "                    manager_calendar_id = manager.google_calendar_id if manager.google_calendar_id else calendar_id_to_use",
+            "                    ",
+            "                    try:",
+            "                        # Create meeting in both calendars"
+          ],
+          "target": "                        result = self.dual_calendar_creator.create_meeting_in_both_calendars(",
+          "after": [
+            "                            manager_calendar_id=manager_calendar_id,",
+            "                            owner_calendar_id=owner_calendar_id or manager_calendar_id,",
+            "                            manager_name=f\"{manager.first_name} {manager.last_name}\",",
+            "                            owner_name=owner_name,",
+            "                            manager_email=manager_email,"
+          ]
+        }
+      },
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/services/meeting_service.py",
+        "line": 161,
+        "code": "result = self.dual_calendar_creator.create_meeting_in_both_calendars(",
+        "context": {
+          "before": [
+            "                            if owners_with_calendar:",
+            "                                fallback_owner = owners_with_calendar[0]",
+            "                                logger.info(f\"🔄 FALLBACK: Using owner {fallback_owner.first_name}'s calendar: {fallback_owner.google_calendar_id}\")",
+            "                                ",
+            "                                # Use dual calendar creator for fallback too"
+          ],
+          "target": "                                result = self.dual_calendar_creator.create_meeting_in_both_calendars(",
+          "after": [
+            "                                    manager_calendar_id=fallback_owner.google_calendar_id,",
+            "                                    owner_calendar_id=fallback_owner.google_calendar_id,",
+            "                                    manager_name=f\"{manager.first_name} {manager.last_name}\",",
+            "                                    owner_name=f\"{fallback_owner.first_name} {fallback_owner.last_name}\",",
+            "                                    manager_email=manager_email,"
+          ]
+        }
+      }
+    ],
+    "potential_loops": [],
+    "root_cause_hypothesis": [
+      {
+        "hypothesis": "_create_event_with_fallback method has internal duplication",
+        "evidence": "Found 2 events().insert calls in fallback method",
+        "severity": "critical",
+        "likely_cause": true
+      }
+    ],
+    "dual_calendar_logic": {
+      "method_exists": true,
+      "events_insert_calls": [
+        {
+          "line": 171,
+          "code": "event = self.calendar_service._service.events().insert(",
+          "in_method": "_create_event_with_fallback"
+        },
+        {
+          "line": 189,
+          "code": "event = self.calendar_service._service.events().insert(",
+          "in_method": "_create_event_with_fallback"
+        }
+      ],
+      "calendar_creation_logic": {
+        "manager_calendar_creation": true,
+        "owner_calendar_creation": true,
+        "same_calendar_used_twice": false,
+        "creation_conditions": [
+          {
+            "type": "manager_creation",
+            "line": 81,
+            "condition": "Always creates in manager calendar"
+          },
+          {
+            "type": "owner_creation",
+            "line": 116,
+            "condition": "Unknown condition"
+          }
+        ]
+      },
+      "fallback_logic": {}
+    }
+  },
+  "critical_findings": [
+    {
+      "hypothesis": "_create_event_with_fallback method has internal duplication",
+      "evidence": "Found 2 events().insert calls in fallback method",
+      "severity": "critical",
+      "likely_cause": true
+    }
+  ],
+  "recommended_fixes": []
+}

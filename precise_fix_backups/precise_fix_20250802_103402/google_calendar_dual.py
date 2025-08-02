@@ -114,7 +114,6 @@ class DualCalendarCreator:
             results['errors'].append(f"Manager calendar error: {str(e)}")
         
         # 2. Create in owner's calendar (if different from manager)
-        logger.info(f"🔍 Owner calendar check: owner_id={owner_calendar_id}, manager_id={manager_calendar_id}")
         if owner_calendar_id and owner_calendar_id != manager_calendar_id:
             try:
                 logger.info(f"Creating meeting in owner's calendar: {owner_calendar_id}")
@@ -158,57 +157,46 @@ class DualCalendarCreator:
                 logger.error(f"Error creating in owner's calendar: {e}")
                 results['errors'].append(f"Owner calendar error: {str(e)}")
         
-        # Log final results for debugging
-        logger.info(f"📊 DUAL CALENDAR RESULTS: Manager={results['manager_event_id']}, Owner={results['owner_event_id']}, Meet={results['meet_link']}")
-        
         # Determine overall success
         results['success'] = bool(results['manager_event_id'] or results['owner_event_id'])
         
         return results
     
     def _create_event_with_fallback(self, calendar_id: str, event_data: dict, calendar_type: str):
-        """Create event with OAuth-specific Google Meet conference creation - SINGLE CALL ONLY"""
-        
-        # Log the attempt for debugging
-        has_conference = 'conferenceData' in event_data
-        has_attendees = 'attendees' in event_data
+        """Simplified event creation - ONE attempt only"""
         logger.info(f"📅 Creating event in {calendar_type}'s calendar: {calendar_id}")
-        logger.info(f"🔍 Event details: conference={has_conference}, attendees={has_attendees}")
         
-        # Detect calendar type: OAuth vs Service Account
-        is_oauth_calendar = self._is_oauth_calendar(calendar_id)
-        logger.info(f"🔍 Calendar type: {'OAuth' if is_oauth_calendar else 'Service Account'}")
-        
-        # SINGLE ATTEMPT - No multiple fallbacks to prevent duplication
         try:
-            if is_oauth_calendar:
-                # OAuth calendars ALSO need conferenceDataVersion for Google Meet
-                event = self.calendar_service._service.events().insert(
-                    calendarId=calendar_id,
-                    body=event_data,
-                    conferenceDataVersion=1
-                ).execute()
-            else:
-                # Service Account calendars need conferenceDataVersion
-                event = self.calendar_service._service.events().insert(
-                    calendarId=calendar_id,
-                    body=event_data,
-                    conferenceDataVersion=1
-                ).execute()
+            # Single attempt - no complex fallbacks
+            event = self.calendar_service._service.events().insert(
+                calendarId=calendar_id,
+                body=event_data,
+                conferenceDataVersion=1
+            ).execute()
             
-            # Check if Google Meet was created
-            if event.get('conferenceData') and event.get('conferenceData').get('conferenceId'):
-                logger.info(f"✅ SUCCESS: Created event with Google Meet in {calendar_type}'s calendar")
-                logger.info(f"🔗 Google Meet ID: {event.get('conferenceData').get('conferenceId')}")
-                logger.info(f"🔗 Google Meet Link: {event.get('hangoutLink', 'Not available')}")
-            else:
-                logger.info(f"✅ SUCCESS: Created event (no Google Meet) in {calendar_type}'s calendar")
-            
+            logger.info(f"✅ SUCCESS: Created event in {calendar_type}'s calendar")
             return event
             
         except Exception as e:
             logger.error(f"❌ Failed to create event in {calendar_type}'s calendar: {e}")
-            return None
+            
+            # Only fallback: basic event without conference
+            try:
+                basic_data = event_data.copy()
+                basic_data.pop('conferenceData', None)
+                basic_data.pop('attendees', None)
+                
+                event = self.calendar_service._service.events().insert(
+                    calendarId=calendar_id,
+                    body=basic_data
+                ).execute()
+                
+                logger.info(f"✅ Created basic event in {calendar_type}'s calendar")
+                return event
+                
+            except Exception as basic_error:
+                logger.error(f"❌ Even basic event failed: {basic_error}")
+                return None
 
     def _is_valid_email(self, email: str) -> bool:
         """Check if email is valid and not empty."""

@@ -1,0 +1,31 @@
+{
+  "timestamp": "2025-08-02T10:34:02.475700",
+  "fixes": [
+    {
+      "status": "fixed",
+      "file": "/Users/evgenii/meeting-scheduler-bot/src/services/meeting_service.py",
+      "backup_id": "precise_fix_20250802_103402",
+      "changes": [
+        "Удален дублированный fallback блок создания",
+        "Исправлена логика owner_calendar_id"
+      ]
+    },
+    {
+      "status": "fixed",
+      "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+      "backup_id": "precise_fix_20250802_103402",
+      "changes": [
+        "Метод _create_event_with_fallback теперь делает только 1 вызов events().insert",
+        "Убраны все дублирующие fallback стратегии",
+        "Сохранена OAuth vs Service Account логика"
+      ]
+    }
+  ],
+  "verification": {
+    "meeting_service_calls": 1,
+    "dual_calendar_insert_calls": 2,
+    "expected_total_events": 2,
+    "is_fixed": true
+  },
+  "success": true
+}

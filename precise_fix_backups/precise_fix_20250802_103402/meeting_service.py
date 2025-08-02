@@ -23,7 +23,6 @@ def log_system_state_for_meeting():
         logger.info(f"📊 SYSTEM STATE: Timestamp {datetime.now().isoformat()}")
     except Exception as e:
         logger.warning(f"Failed to log system state: {e}")
-        # Continue without system state logging - not critical
 
 class MeetingService:
     def __init__(self, db: Session):
@@ -57,7 +56,6 @@ class MeetingService:
             if self.calendar_service.is_available:
                 # Get owner emails for meeting participants
                 owners = OwnerService.get_all_owners()
-                logger.info(f"👥 Found {len(owners)} owners in database")
                 owner_emails = []
                 manager_email = manager.email if manager.email else None
                 
@@ -103,16 +101,7 @@ class MeetingService:
                     logger.info(f"🔍 DEBUG: Creating meeting in both calendars")
                     
                     # Get owner info for dual calendar creation
-                    # First try to find owner with connected calendar
-                    owner_with_calendar = None
-                    for owner in owners:
-                        if owner.google_calendar_id and owner.oauth_credentials:
-                            owner_with_calendar = owner
-                            logger.info(f"✅ Found owner with calendar: {owner.first_name} {owner.last_name} - {owner.google_calendar_id}")
-                            break
-                    
-                    # Use owner with calendar, or fallback to first owner
-                    primary_owner = owner_with_calendar or (owners[0] if owners else None)
+                    primary_owner = owners[0] if owners else None
                     owner_calendar_id = None
                     owner_name = "Owner"
                     owner_email = None
@@ -128,21 +117,15 @@ class MeetingService:
                         # Check if owner has calendar connected
                         if primary_owner.google_calendar_id:
                             owner_calendar_id = primary_owner.google_calendar_id
-                            logger.info(f"📅 Owner has calendar connected: {owner_calendar_id}")
-                        else:
-                            logger.warning(f"⚠️ Owner {owner_name} has NO calendar connected")
                     
                     # Use manager's calendar if available, otherwise use owner's
                     manager_calendar_id = manager.google_calendar_id if manager.google_calendar_id else calendar_id_to_use
-                    
-                    logger.info(f"📊 CALENDAR IDS: Manager={manager_calendar_id}, Owner={owner_calendar_id}")
-                    logger.info(f"👥 PARTICIPANTS: Manager={manager.first_name} ({manager_email}), Owner={owner_name} ({owner_email})")
                     
                     try:
                         # Create meeting in both calendars
                         result = self.dual_calendar_creator.create_meeting_in_both_calendars(
                             manager_calendar_id=manager_calendar_id,
-                            owner_calendar_id=owner_calendar_id,
+                            owner_calendar_id=owner_calendar_id or manager_calendar_id,
                             manager_name=f"{manager.first_name} {manager.last_name}",
                             owner_name=owner_name,
                             manager_email=manager_email,
@@ -156,13 +139,46 @@ class MeetingService:
                             event_id = result['manager_event_id'] or result['owner_event_id']
                             meet_link = result['meet_link']
                             logger.info(f"✅ Created meetings: Manager={result['manager_event_id']}, Owner={result['owner_event_id']}")
-                            logger.info(f"🔗 Google Meet link: {meet_link if meet_link else 'NOT CREATED'}")
                         else:
                             raise Exception(f"Failed to create meetings: {', '.join(result['errors'])}")
                     except Exception as calendar_error:
                         logger.error(f"❌ CALENDAR ERROR: Failed to create in {calendar_owner_name}'s calendar: {calendar_error}")
                         
-                        
+                        # If manager's calendar failed, try owner's calendar as fallback
+                        if "manager" in calendar_owner_name:
+                            logger.info("🔄 FALLBACK: Trying owner's calendar...")
+                            owners_with_calendar = self.db.query(User).filter(
+                                User.role == UserRole.OWNER,
+                                User.oauth_credentials.isnot(None),
+                                User.google_calendar_id.isnot(None)
+                            ).all()
+                            
+                            if owners_with_calendar:
+                                fallback_owner = owners_with_calendar[0]
+                                logger.info(f"🔄 FALLBACK: Using owner {fallback_owner.first_name}'s calendar: {fallback_owner.google_calendar_id}")
+                                
+                                # Use dual calendar creator for fallback too
+                                result = self.dual_calendar_creator.create_meeting_in_both_calendars(
+                                    manager_calendar_id=fallback_owner.google_calendar_id,
+                                    owner_calendar_id=fallback_owner.google_calendar_id,
+                                    manager_name=f"{manager.first_name} {manager.last_name}",
+                                    owner_name=f"{fallback_owner.first_name} {fallback_owner.last_name}",
+                                    manager_email=manager_email,
+                                    owner_email=fallback_owner.email,
+                                    department=manager.department.value,
+                                    scheduled_time=scheduled_time,
+                                    time_str=time_str
+                                )
+                                
+                                if result['success']:
+                                    event_id = result['manager_event_id'] or result['owner_event_id']
+                                    meet_link = result['meet_link']
+                                else:
+                                    raise Exception(f"Fallback failed: {', '.join(result['errors'])}")
+                            else:
+                                raise calendar_error
+                        else:
+                            raise calendar_error
                 else:
                     # No owners have connected their calendars via OAuth
                     logger.error(f"❌ CALENDAR SETUP REQUIRED: No users have connected their Google Calendar via OAuth")

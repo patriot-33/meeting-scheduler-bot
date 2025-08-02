@@ -1,0 +1,25 @@
+{
+  "timestamp": "2025-08-02T10:31:48.177847",
+  "problems_detected": [
+    "Теперь создается 4 события (было 3) - УХУДШЕНИЕ",
+    "Удаляется только 1 событие - НЕ ИСПРАВЛЕНО",
+    "Google Meet полностью отсутствует - НЕ ИСПРАВЛЕНО",
+    "Логи в Render.com недоступны - НОВАЯ ПРОБЛЕМА"
+  ],
+  "severity": "CRITICAL - система стала работать хуже",
+  "immediate_action": "НЕМЕДЛЕННЫЙ ОТКАТ",
+  "dual_calendar_issues": {
+    "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+    "insert_calls_count": 4,
+    "issues": [
+      "Слишком много events().insert: 4"
+    ]
+  },
+  "meeting_service_issues": {
+    "file": "/Users/evgenii/meeting-scheduler-bot/src/services/meeting_service.py",
+    "dual_creation_calls": 1,
+    "issues": [
+      "Используется новый метод удаления - может быть проблемой"
+    ]
+  }
+}
