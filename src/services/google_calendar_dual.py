@@ -88,17 +88,15 @@ class DualCalendarCreator:
             },
         }
         
-        # Add conference data with correct type - FIXED: hangoutsMeet should NOT be in conferenceSolutionKey
+        # FINAL FIX: Google Calendar API requires EXACT structure for hangoutsMeet
         conference_request_id = f"meet-{int(datetime.now().timestamp())}-{abs(hash(manager_calendar_id))}"
         base_event_data['conferenceData'] = {
             'createRequest': {
                 'requestId': conference_request_id,
                 'conferenceSolutionKey': {
-                    'type': 'hangoutsMeet'  # CRITICAL: This is the correct location for hangoutsMeet
-                },
-                'status': {
-                    'statusCode': 'pending'
+                    'type': 'hangoutsMeet'  # Must be 'hangoutsMeet' not 'eventHangout'
                 }
+                # NO status field needed for hangoutsMeet
             }
         }
         
@@ -229,29 +227,34 @@ class DualCalendarCreator:
         is_oauth_calendar = self._is_oauth_calendar(calendar_id)
         logger.info(f"🔍 Calendar type: {'OAuth' if is_oauth_calendar else 'Service Account'}")
         
-        # SINGLE ATTEMPT - No multiple fallbacks to prevent duplication
+        # DUAL ATTEMPT - Try with Google Meet, fallback without
+        event_data_with_meet = event_data.copy()
+        event_data_without_meet = event_data.copy()
+        if 'conferenceData' in event_data_without_meet:
+            del event_data_without_meet['conferenceData']
+        
         try:
-            logger.error(f"🚑 ATTEMPTING API CALL: OAuth={is_oauth_calendar}")
-            logger.error(f"🚑 Event data keys: {list(event_data.keys())}")
+            logger.error(f"🚑 ATTEMPTING API CALL WITH GOOGLE MEET: OAuth={is_oauth_calendar}")
+            logger.error(f"🚑 Event data keys: {list(event_data_with_meet.keys())}")
             
             if is_oauth_calendar:
-                # OAuth calendars ALSO need conferenceDataVersion for Google Meet
-                logger.error(f"🚑 Making OAuth calendar insert call")
+                # OAuth calendars with Google Meet
+                logger.error(f"🚑 Making OAuth calendar insert call WITH MEET")
                 event = self.calendar_service._service.events().insert(
                     calendarId=calendar_id,
-                    body=event_data,
+                    body=event_data_with_meet,
                     conferenceDataVersion=1
                 ).execute()
-                logger.error(f"🚑 OAuth insert SUCCESS: {event.get('id', 'NO_ID')}")
+                logger.error(f"🚑 OAuth insert WITH MEET SUCCESS: {event.get('id', 'NO_ID')}")
             else:
-                # Service Account calendars need conferenceDataVersion
-                logger.error(f"🚑 Making Service Account calendar insert call")
+                # Service Account calendars with Google Meet
+                logger.error(f"🚑 Making Service Account calendar insert call WITH MEET")
                 event = self.calendar_service._service.events().insert(
                     calendarId=calendar_id,
-                    body=event_data,
+                    body=event_data_with_meet,
                     conferenceDataVersion=1
                 ).execute()
-                logger.error(f"🚑 Service Account insert SUCCESS: {event.get('id', 'NO_ID')}")
+                logger.error(f"🚑 Service Account insert WITH MEET SUCCESS: {event.get('id', 'NO_ID')}")
             
             # Check if Google Meet was created
             if event.get('conferenceData') and event.get('conferenceData').get('conferenceId'):
@@ -262,6 +265,33 @@ class DualCalendarCreator:
                 logger.info(f"✅ SUCCESS: Created event (no Google Meet) in {calendar_type}'s calendar")
             
             return event
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Google Meet creation failed: {e}")
+            logger.error(f"🚑 FALLBACK: Trying WITHOUT Google Meet")
+            
+            # FALLBACK: Create event without Google Meet
+            try:
+                if is_oauth_calendar:
+                    logger.error(f"🚑 Making OAuth calendar FALLBACK insert call")
+                    event = self.calendar_service._service.events().insert(
+                        calendarId=calendar_id,
+                        body=event_data_without_meet
+                    ).execute()
+                    logger.error(f"🚑 OAuth FALLBACK insert SUCCESS: {event.get('id', 'NO_ID')}")
+                else:
+                    logger.error(f"🚑 Making Service Account FALLBACK insert call")
+                    event = self.calendar_service._service.events().insert(
+                        calendarId=calendar_id,
+                        body=event_data_without_meet
+                    ).execute()
+                    logger.error(f"🚑 Service Account FALLBACK insert SUCCESS: {event.get('id', 'NO_ID')}")
+                
+                logger.info(f"✅ FALLBACK SUCCESS: Created event without Google Meet in {calendar_type}'s calendar")
+                return event
+            except Exception as fallback_error:
+                logger.error(f"❌ FALLBACK ALSO FAILED: {fallback_error}")
+                raise fallback_error
             
         except Exception as e:
             logger.error(f"❌ Failed to create event in {calendar_type}'s calendar: {e}")
