@@ -185,22 +185,56 @@ logger.info(f"Email validation: manager_valid={is_valid_email(manager_email)}, o
 
 #### **Pull Request:**
 - **Ветка:** `fix-oauth-attendees-clean`
-- **Коммит:** `7af0b25` - 🛡️ Fix OAuth calendar attendee handling and remove Service Account fallback
+- **Коммиты:** 
+  - `7af0b25` - 🛡️ Fix OAuth calendar attendee handling and remove Service Account fallback
+  - `8a84047` - 🔧 Fix calendar deletion by implementing OAuth credentials for both calendars
 - **Статус:** ⏳ Готов к merge
+
+### **ИСПРАВЛЕНИЕ 4: OAuth Calendar Deletion Fix**
+### *Дата применения: 2025-08-02 16:00*
+
+#### **Что было исправлено:**
+1. **Добавлена загрузка OAuth credentials для удаления** (`meeting_service.py`)
+   - Система теперь загружает OAuth токены manager'а и owner'а из базы данных
+   - Добавлен поиск owner'а по календарю встречи с fallback на любого owner'а с OAuth
+
+2. **Реализован метод создания календарного сервиса** (`oauth_service.py`)
+   ```python
+   def create_calendar_service_from_credentials(self, credentials_data: dict):
+       """Create authenticated calendar service from credentials data."""
+       credentials = Credentials.from_authorized_user_info(credentials_data)
+       if credentials.expired and credentials.refresh_token:
+           credentials.refresh(Request())
+       return build('calendar', 'v3', credentials=credentials)
+   ```
+
+3. **Улучшена логика удаления календарей** (`google_calendar_dual.py`)
+   - OAuth сервисы используются для удаления из личных календарей пользователей
+   - Service Account используется как fallback при недоступности OAuth
+   - Добавлено детальное логирование процесса удаления
 
 #### **Техническое решение:**
 ```python
-# СТАРАЯ ЛОГИКА (проблемная):
-if owner_email and not settings.google_calendar_force_attendee_free:
-    # Добавить участника (могло падать при None email)
+# СТАРАЯ ЛОГИКА (не работала):
+manager_oauth_credentials=None,  # TODO: Implement OAuth credentials loading
+owner_oauth_credentials=None    # TODO: Implement OAuth credentials loading
 
-# НОВАЯ ЛОГИКА (исправленная):
-if owner_email and self._is_valid_email(owner_email):
-    # Добавить участника только если email валидный
-    logger.info(f"Adding owner {owner_name} ({owner_email}) as attendee")
-elif owner_email and not self._is_valid_email(owner_email):
-    logger.warning(f"⚠️ Invalid owner email '{owner_email}' - creating meeting without attendee")
+# НОВАЯ ЛОГИКА (работает):
+# Загружаем OAuth credentials из БД
+manager_oauth_creds = json.loads(manager.oauth_credentials) if manager.oauth_credentials else None
+owner_oauth_creds = json.loads(owner_with_calendar.oauth_credentials) if owner_with_calendar else None
+
+# Используем OAuth для удаления
+user_calendar_service = oauth_service.create_calendar_service_from_credentials(oauth_credentials)
+user_calendar_service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
 ```
+
+#### **Ожидаемый результат:**
+- ✅ Встречи удаляются из календарей ОБЕИХ сторон (manager + owner)
+- ✅ OAuth календари используются для корректных прав доступа
+- ✅ Service Account fallback для случаев когда OAuth недоступен
+- ✅ Детальное логирование для диагностики процесса удаления
+
 
 #### **Ожидаемый результат:**
 - ✅ OAuth календари работают корректно с валидными email участников
