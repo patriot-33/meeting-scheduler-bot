@@ -1,4 +1,4 @@
-# 🤖 Meeting Scheduler Bot
+# 🤖 Meeting Scheduler Bot - ML Enhanced
 
 [![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://python.org)
 [![Telegram Bot API](https://img.shields.io/badge/Telegram%20Bot%20API-20.7-blue.svg)](https://python-telegram-bot.org/)
