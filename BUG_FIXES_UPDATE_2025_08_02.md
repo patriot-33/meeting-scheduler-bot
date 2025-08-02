@@ -187,8 +187,9 @@ logger.info(f"Email validation: manager_valid={is_valid_email(manager_email)}, o
 - **Ветка:** `fix-oauth-attendees-clean`
 - **Коммиты:** 
   - `7af0b25` - 🛡️ Fix OAuth calendar attendee handling and remove Service Account fallback
-  - `8a84047` - 🔧 Fix calendar deletion by implementing OAuth credentials for both calendars
-- **Статус:** ⏳ Готов к merge
+  - `8a84047` - 🔧 Fix calendar deletion by implementing OAuth credentials for both calendars  
+  - `36b6268` - 🐛 Fix UnboundLocalError for UserRole in meeting deletion
+- **Статус:** ✅ Готов к merge
 
 ### **ИСПРАВЛЕНИЕ 4: OAuth Calendar Deletion Fix**
 ### *Дата применения: 2025-08-02 16:00*
@@ -235,6 +236,44 @@ user_calendar_service.events().delete(calendarId=calendar_id, eventId=event_id).
 - ✅ Service Account fallback для случаев когда OAuth недоступен
 - ✅ Детальное логирование для диагностики процесса удаления
 
+### **ИСПРАВЛЕНИЕ 5: UnboundLocalError Fix**
+### *Дата применения: 2025-08-02 16:45*
+
+#### **Проблема:**
+```
+cannot access local variable 'UserRole' where it is not associated with a value
+```
+
+#### **Что было исправлено:**
+1. **Удален дублированный импорт UserRole** (`meeting_service.py`)
+   - Убран избыточный `from database import UserRole` на строке 72
+   - UserRole уже импортирован на уровне модуля (строка 10)
+   - Дублированный импорт внутри условного блока вызывал конфликт
+
+#### **Техническое решение:**
+```python
+# ПРОБЛЕМНАЯ ЛОГИКА:
+# UserRole импортирован на строке 10
+from database import Meeting, User, MeetingStatus, UserStatus, UserRole
+
+# И снова импортирован на строке 72 внутри функции
+if manager.google_calendar_id and manager.oauth_credentials:
+    from database import UserRole  # <- ОШИБКА: дублированный импорт
+
+# ИСПРАВЛЕННАЯ ЛОГИКА:
+# UserRole используется из импорта на уровне модуля
+if manager.google_calendar_id and manager.oauth_credentials:
+    # Импорт удален - используется глобальный UserRole
+```
+
+#### **Коммит:**
+- **ID:** `36b6268` - 🐛 Fix UnboundLocalError for UserRole in meeting deletion
+
+#### **Ожидаемый результат:**
+- ✅ Удаление встреч работает без ошибок UnboundLocalError
+- ✅ Функция `cancel_meeting()` корректно выполняется
+- ✅ Нет больше ошибки "Ошибка при отмене встречи" в боте
+
 
 #### **Ожидаемый результат:**
 - ✅ OAuth календари работают корректно с валидными email участников
@@ -266,4 +305,4 @@ git push origin main
 ---
 
 *🤖 Обновление создано диагностической системой Claude Code v3.0*  
-*Дата: 2025-08-02 | Исправления применены: 15:30*
+*Дата: 2025-08-02 | Последнее обновление: 16:45*
