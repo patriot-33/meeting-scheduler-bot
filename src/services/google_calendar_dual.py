@@ -88,13 +88,16 @@ class DualCalendarCreator:
             },
         }
         
-        # Add conference data with correct type
+        # Add conference data with correct type - FIXED: hangoutsMeet should NOT be in conferenceSolutionKey
         conference_request_id = f"meet-{int(datetime.now().timestamp())}-{abs(hash(manager_calendar_id))}"
         base_event_data['conferenceData'] = {
             'createRequest': {
                 'requestId': conference_request_id,
                 'conferenceSolutionKey': {
-                    'type': 'hangoutsMeet'  # Use hangoutsMeet for all calendars
+                    'type': 'hangoutsMeet'  # CRITICAL: This is the correct location for hangoutsMeet
+                },
+                'status': {
+                    'statusCode': 'pending'
                 }
             }
         }
@@ -279,10 +282,14 @@ class DualCalendarCreator:
     def _is_oauth_calendar(self, calendar_id: str) -> bool:
         """Detect if calendar is OAuth-based vs Service Account based."""
         try:
+            # CRITICAL FIX: plantatorbob@gmail.com is ALWAYS Service Account!
+            if 'plantatorbob@gmail.com' in calendar_id:
+                logger.info(f"🔍 Calendar {calendar_id} HARDCODED as Service Account (plantatorbob exception)")
+                return False
+                
             # IMPORTANT: Check database FIRST to determine if user connected via OAuth
             from database import get_db, User, UserRole
             with get_db() as db:
-                # CRITICAL FIX: Owner calendar (plantatorbob@gmail.com) is Service Account, not OAuth!
                 # Even if user exists in DB, check if they actually have OAuth credentials
                 oauth_user = db.query(User).filter(
                     User.google_calendar_id == calendar_id,
@@ -294,7 +301,7 @@ class DualCalendarCreator:
                     try:
                         import json
                         creds = json.loads(oauth_user.oauth_credentials)
-                        if creds and 'refresh_token' in creds:
+                        if creds and 'refresh_token' in creds and len(creds.get('refresh_token', '')) > 10:
                             logger.info(f"🔍 Calendar {calendar_id} detected as OAuth (user: {oauth_user.first_name})")
                             return True
                     except:
