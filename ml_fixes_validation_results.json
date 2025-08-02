@@ -1,0 +1,129 @@
+{
+  "timestamp": "2025-08-02T16:52:47.434174",
+  "tests": [
+    {
+      "name": "test_service_health",
+      "status": "passed",
+      "details": {
+        "success": true,
+        "data": {
+          "status": "healthy",
+          "checks": {
+            "timestamp": "2025-08-02T13:52:47.956139",
+            "database": {
+              "status": true,
+              "message": "Database OK"
+            },
+            "config": {
+              "status": true,
+              "message": "Config OK"
+            }
+          }
+        },
+        "message": "Service is healthy and responding"
+      },
+      "timestamp": "2025-08-02T16:52:47.813605"
+    },
+    {
+      "name": "test_webhook_status",
+      "status": "passed",
+      "details": {
+        "success": true,
+        "message": "Webhook endpoint is responding",
+        "data": "Webhook endpoint is working. Use POST for Telegram updates."
+      },
+      "timestamp": "2025-08-02T16:52:48.192973"
+    },
+    {
+      "name": "test_ml_diagnostic_files",
+      "status": "passed",
+      "details": {
+        "success": true,
+        "message": "All 7 ML system files present",
+        "data": {
+          "files_checked": [
+            "diagnostic_config.yaml",
+            "src/diagnostic_system/__init__.py",
+            "src/diagnostic_system/mandatory_history.py",
+            "src/diagnostic_system/enhanced_ml_predictor.py",
+            "diagnose_calendar_simple.py",
+            "apply_diagnostic_fixes.py",
+            "ML_DIAGNOSTIC_SUMMARY.md"
+          ]
+        }
+      },
+      "timestamp": "2025-08-02T16:52:48.193532"
+    },
+    {
+      "name": "test_code_improvements",
+      "status": "passed",
+      "details": {
+        "success": true,
+        "data": {
+          "improvements_found": [
+            "✅ Conference type uses hangoutsMeet",
+            "✅ OAuth detection with refresh_token validation",
+            "✅ Service Account handling present"
+          ],
+          "issues_remaining": []
+        },
+        "message": "Found 3 improvements, 0 issues remaining"
+      },
+      "timestamp": "2025-08-02T16:52:48.195694"
+    },
+    {
+      "name": "test_conference_type_fix",
+      "status": "passed",
+      "details": {
+        "success": true,
+        "message": "Conference type correctly uses hangoutsMeet",
+        "data": {
+          "hangoutsMeet_lines": [
+            "src/services/google_calendar_dual.py:97",
+            "src/services/google_calendar.py:368",
+            "src/services/google_calendar.py:446"
+          ]
+        }
+      },
+      "timestamp": "2025-08-02T16:52:48.196643"
+    },
+    {
+      "name": "test_oauth_detection_improvement",
+      "status": "passed",
+      "details": {
+        "success": true,
+        "data": {
+          "improvements_found": [
+            "OAuth detection method present",
+            "refresh_token validation present",
+            "JSON credential parsing present",
+            "Service Account distinction present"
+          ],
+          "improvement_count": 4
+        },
+        "message": "Found 4/4 OAuth improvements"
+      },
+      "timestamp": "2025-08-02T16:52:48.196816"
+    },
+    {
+      "name": "test_service_logs_for_errors",
+      "status": "passed",
+      "details": {
+        "success": true,
+        "data": {
+          "errors_in_local_logs": [],
+          "note": "Production logs need to be checked separately in Render.com"
+        },
+        "message": "Local logs analysis: 0 known error patterns found"
+      },
+      "timestamp": "2025-08-02T16:52:48.197332"
+    }
+  ],
+  "overall_status": "excellent",
+  "summary": {
+    "total_tests": 7,
+    "passed": 7,
+    "failed": 0,
+    "success_rate": 100.0
+  }
+}
