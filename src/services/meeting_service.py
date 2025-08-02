@@ -69,7 +69,6 @@ class MeetingService:
                 time_str = scheduled_time.strftime('%H:%M')
                 
                 # PRIORITY: Use manager's calendar if connected, otherwise use owner's calendar
-                from database import UserRole
                 
                 calendar_id_to_use = None
                 calendar_owner_name = None
@@ -257,7 +256,6 @@ class MeetingService:
             
             # If no owner found by calendar ID, find any owner with OAuth
             if not owner_with_calendar:
-                from database import UserRole
                 owner_with_calendar = self.db.query(User).filter(
                     User.role == UserRole.OWNER,
                     User.oauth_credentials.isnot(None),
