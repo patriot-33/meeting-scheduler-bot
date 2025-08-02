@@ -27,8 +27,10 @@ def log_system_state_for_meeting():
 
 class MeetingService:
     def __init__(self, db: Session):
+        logger.error(f"🚑 MeetingService.__init__ called")
         self.db = db
         self.calendar_service = google_calendar_service
+        logger.error(f"🚑 Google calendar service available: {google_calendar_service.is_available}")
         self.dual_calendar_creator = DualCalendarCreator(google_calendar_service)
         self.reminder_service = ReminderService()
     

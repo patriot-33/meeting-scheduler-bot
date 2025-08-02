@@ -21,6 +21,7 @@ class GoogleCalendarService:
         self._service = None
         self._credentials = None
         self._is_available = False
+        logger.error(f"🚑 GoogleCalendarService.__init__ called")
         self._initialize_service()
     
     def _initialize_service(self):
