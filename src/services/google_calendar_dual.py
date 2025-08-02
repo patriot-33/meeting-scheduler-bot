@@ -66,9 +66,6 @@ class DualCalendarCreator:
                     'requestId': f"meet-{int(datetime.now().timestamp())}-{abs(hash(manager_calendar_id))}",
                     'conferenceSolutionKey': {
                         'type': 'hangoutsMeet'
-                    },
-                    'status': {
-                        'statusCode': 'pending'
                     }
                 }
             },
@@ -166,96 +163,146 @@ class DualCalendarCreator:
         return results
     
     def _create_event_with_fallback(self, calendar_id: str, event_data: dict, calendar_type: str):
-        """Create event with fallback for conference data errors."""
-        try:
-            # First try with conference data
-            if 'conferenceData' in event_data:
+        """Create event with improved Google Meet conference creation."""
+        
+        # Log the attempt for debugging
+        has_conference = 'conferenceData' in event_data
+        has_attendees = 'attendees' in event_data
+        logger.info(f"📅 Creating event in {calendar_type}'s calendar: {calendar_id}")
+        logger.info(f"🔍 Event details: conference={has_conference}, attendees={has_attendees}")
+        
+        # Strategy 1: Try multiple conferenceDataVersion values
+        if has_conference:
+            for version in [1, 0]:  # Try both conference data versions
                 try:
-                    event = self.calendar_service._service.events().insert(
-                        calendarId=calendar_id,
-                        body=event_data,
-                        conferenceDataVersion=1
-                    ).execute()
-                    logger.info(f"✅ Created event with Google Meet in {calendar_type}'s calendar")
-                    return event
-                except Exception as conf_error:
-                    error_msg = str(conf_error).lower()
+                    logger.info(f"🔄 Attempting Google Meet creation with conferenceDataVersion={version}")
                     
-                    # Check if error is related to invalid attendees
-                    if "invalid attendee" in error_msg or "attendee" in error_msg:
-                        logger.warning(f"❌ Attendee error for {calendar_type}: {conf_error}")
-                        logger.info(f"🔄 Retrying without attendees for {calendar_type}'s calendar")
-                        
-                        # Remove attendees and try again
-                        event_data_fallback = event_data.copy()
-                        event_data_fallback.pop('attendees', None)
-                        
-                        try:
-                            event = self.calendar_service._service.events().insert(
-                                calendarId=calendar_id,
-                                body=event_data_fallback,
-                                conferenceDataVersion=1
-                            ).execute()
-                            logger.info(f"✅ Created event with Google Meet (no attendees) in {calendar_type}'s calendar")
-                            return event
-                        except Exception as retry_error:
-                            logger.warning(f"Conference creation still failed for {calendar_type}: {retry_error}")
-                            # Final fallback: no conference data
-                            event_data_final = event_data.copy()
-                            event_data_final.pop('conferenceData', None)
-                            event_data_final.pop('attendees', None)
-                            event = self.calendar_service._service.events().insert(
-                                calendarId=calendar_id,
-                                body=event_data_final
-                            ).execute()
-                            logger.info(f"✅ Created basic event (no Google Meet, no attendees) in {calendar_type}'s calendar")
-                            return event
-                    else:
-                        error_msg = str(conf_error).lower()
-                        logger.warning(f"Conference creation failed for {calendar_type}: {conf_error}")
-                        
-                        # Check if error is related to conference type
-                        if "invalid conference type" in error_msg:
-                            logger.info(f"🔄 Trying alternative Google Meet creation for {calendar_type}")
-                            
-                            # Try alternative conference data format
-                            alternative_event_data = event_data.copy()
-                            alternative_event_data['conferenceData'] = {
-                                'createRequest': {
-                                    'requestId': f"alt-meet-{int(datetime.now().timestamp())}-{abs(hash(calendar_id))}"
-                                }
-                            }
-                            
-                            try:
-                                event = self.calendar_service._service.events().insert(
-                                    calendarId=calendar_id,
-                                    body=alternative_event_data,
-                                    conferenceDataVersion=1
-                                ).execute()
-                                logger.info(f"✅ Created event with alternative Google Meet in {calendar_type}'s calendar")
-                                return event
-                            except Exception as alt_error:
-                                logger.warning(f"Alternative Meet creation failed for {calendar_type}: {alt_error}")
-                        
-                        # Remove conference data and try again
-                        event_data_fallback = event_data.copy()
-                        event_data_fallback.pop('conferenceData', None)
+                    if version == 0:
+                        # For version 0, try without conferenceDataVersion parameter
                         event = self.calendar_service._service.events().insert(
                             calendarId=calendar_id,
-                            body=event_data_fallback
+                            body=event_data
                         ).execute()
-                        logger.info(f"✅ Created event without Google Meet in {calendar_type}'s calendar")
+                    else:
+                        # For version 1, explicitly set conferenceDataVersion
+                        event = self.calendar_service._service.events().insert(
+                            calendarId=calendar_id,
+                            body=event_data,
+                            conferenceDataVersion=version
+                        ).execute()
+                    
+                    # Check if Google Meet was actually created
+                    if event.get('conferenceData') and event.get('conferenceData').get('conferenceId'):
+                        logger.info(f"✅ SUCCESS: Created event with Google Meet in {calendar_type}'s calendar")
+                        logger.info(f"🔗 Google Meet ID: {event.get('conferenceData').get('conferenceId')}")
                         return event
-            else:
-                # No conference data, create directly
+                    else:
+                        logger.warning(f"⚠️ Event created but no Google Meet generated (version {version})")
+                        # Continue to try other versions or fallbacks
+                        
+                except Exception as version_error:
+                    logger.warning(f"❌ conferenceDataVersion {version} failed: {version_error}")
+                    continue
+        
+        # Strategy 2: Try alternative conference data formats
+        if has_conference:
+            logger.info("🔄 Trying alternative Google Meet formats...")
+            
+            alternative_formats = [
+                # Format 1: Minimal conference request
+                {
+                    'conferenceData': {
+                        'createRequest': {
+                            'requestId': f"meet-min-{int(datetime.now().timestamp())}"
+                        }
+                    }
+                },
+                # Format 2: Explicit hangouts meet request  
+                {
+                    'conferenceData': {
+                        'createRequest': {
+                            'requestId': f"meet-hang-{int(datetime.now().timestamp())}",
+                            'conferenceSolutionKey': {'type': 'hangoutsMeet'}
+                        }
+                    }
+                },
+                # Format 3: Conference with entry points
+                {
+                    'conferenceData': {
+                        'conferenceSolution': {
+                            'key': {'type': 'hangoutsMeet'},
+                            'name': 'Google Meet',
+                            'iconUri': 'https://fonts.gstatic.com/s/i/productlogos/meet_2020q4/v6/web-512dp/logo_meet_2020q4_color_2x_web_512dp.png'
+                        },
+                        'createRequest': {
+                            'requestId': f"meet-alt-{int(datetime.now().timestamp())}"
+                        }
+                    }
+                }
+            ]
+            
+            for i, alt_format in enumerate(alternative_formats):
+                try:
+                    alt_event_data = event_data.copy()
+                    alt_event_data.update(alt_format)
+                    
+                    logger.info(f"🔄 Trying alternative format {i+1}/3")
+                    event = self.calendar_service._service.events().insert(
+                        calendarId=calendar_id,
+                        body=alt_event_data,
+                        conferenceDataVersion=1
+                    ).execute()
+                    
+                    # Verify Google Meet was created
+                    if event.get('conferenceData') and event.get('conferenceData').get('conferenceId'):
+                        logger.info(f"✅ SUCCESS: Alternative format {i+1} created Google Meet!")
+                        return event
+                    else:
+                        logger.warning(f"⚠️ Alternative format {i+1} created event but no Google Meet")
+                        
+                except Exception as alt_error:
+                    logger.warning(f"❌ Alternative format {i+1} failed: {alt_error}")
+                    continue
+        
+        # Strategy 3: Handle attendee errors but keep trying Google Meet
+        if has_attendees:
+            logger.info("🔄 Retrying without attendees but keeping Google Meet...")
+            try:
+                no_attendees_data = event_data.copy()
+                no_attendees_data.pop('attendees', None)
+                
                 event = self.calendar_service._service.events().insert(
                     calendarId=calendar_id,
-                    body=event_data
+                    body=no_attendees_data,
+                    conferenceDataVersion=1
                 ).execute()
-                return event
                 
-        except Exception as e:
-            logger.error(f"Failed to create event in {calendar_type}'s calendar: {e}")
+                if event.get('conferenceData'):
+                    logger.info(f"✅ SUCCESS: Created Google Meet without attendees in {calendar_type}'s calendar")
+                    return event
+                else:
+                    logger.warning(f"⚠️ Event created without attendees but no Google Meet")
+                    
+            except Exception as no_attendees_error:
+                logger.warning(f"❌ No attendees attempt failed: {no_attendees_error}")
+        
+        # Strategy 4: Create basic event without Google Meet (last resort)
+        logger.warning(f"⚠️ FALLBACK: Creating basic event without Google Meet in {calendar_type}'s calendar")
+        try:
+            basic_event_data = event_data.copy()
+            basic_event_data.pop('conferenceData', None)
+            basic_event_data.pop('attendees', None)
+            
+            event = self.calendar_service._service.events().insert(
+                calendarId=calendar_id,
+                body=basic_event_data
+            ).execute()
+            
+            logger.info(f"✅ Created basic event (no Google Meet) in {calendar_type}'s calendar")
+            return event
+            
+        except Exception as basic_error:
+            logger.error(f"❌ CRITICAL: Even basic event creation failed in {calendar_type}'s calendar: {basic_error}")
             return None
     
     def _is_valid_email(self, email: str) -> bool:
