@@ -63,7 +63,10 @@ class DualCalendarCreator:
             },
             'conferenceData': {
                 'createRequest': {
-                    'requestId': f"meet-{int(datetime.now().timestamp())}-{abs(hash(manager_calendar_id))}"
+                    'requestId': f"meet-{int(datetime.now().timestamp())}-{abs(hash(manager_calendar_id))}",
+                    'conferenceSolutionKey': {
+                        'type': 'hangoutsMeet'
+                    }
                 }
             },
             'reminders': {
@@ -455,51 +458,6 @@ class DualCalendarCreator:
             
         return results
     
-
-    def delete_all_events_for_meeting(self, meeting_data: dict) -> dict:
-        """Delete ALL events created for a meeting (handles multiple events per calendar)"""
-        results = {
-            'success': False,
-            'deleted_count': 0,
-            'errors': []
-        }
-        
-        # Get all possible event IDs
-        event_ids = []
-        if meeting_data.get('google_event_id'):
-            event_ids.append(meeting_data['google_event_id'])
-        if meeting_data.get('google_manager_event_id'):
-            event_ids.append(meeting_data['google_manager_event_id'])
-        if meeting_data.get('google_owner_event_id'):
-            event_ids.append(meeting_data['google_owner_event_id'])
-        
-        # Remove duplicates
-        event_ids = list(set(event_ids))
-        
-        calendars = []
-        if meeting_data.get('manager_calendar_id'):
-            calendars.append(meeting_data['manager_calendar_id'])
-        if meeting_data.get('owner_calendar_id'):
-            calendars.append(meeting_data['owner_calendar_id'])
-        
-        # Try to delete each event from each calendar
-        for calendar_id in calendars:
-            for event_id in event_ids:
-                try:
-                    self.calendar_service._service.events().delete(
-                        calendarId=calendar_id,
-                        eventId=event_id
-                    ).execute()
-                    results['deleted_count'] += 1
-                    logger.info(f"✅ Deleted event {event_id} from calendar {calendar_id}")
-                except Exception as e:
-                    # Не логируем 404 ошибки - это нормально
-                    if "404" not in str(e):
-                        results['errors'].append(f"Failed to delete {event_id} from {calendar_id}: {e}")
-        
-        results['success'] = results['deleted_count'] > 0
-        return results
-
     def _delete_from_calendar(
         self, 
         event_id: str, 

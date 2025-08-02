@@ -63,7 +63,10 @@ class DualCalendarCreator:
             },
             'conferenceData': {
                 'createRequest': {
-                    'requestId': f"meet-{int(datetime.now().timestamp())}-{abs(hash(manager_calendar_id))}"
+                    'requestId': f"meet-{int(datetime.now().timestamp())}-{abs(hash(manager_calendar_id))}",
+                    'conferenceSolutionKey': {
+                        'type': 'hangoutsMeet'
+                    }
                 }
             },
             'reminders': {
@@ -112,7 +115,6 @@ class DualCalendarCreator:
         
         # 2. Create in owner's calendar (if different from manager)
         if owner_calendar_id and owner_calendar_id != manager_calendar_id:
-            # Ensure we don't create duplicate events in the same calendar
             try:
                 logger.info(f"Creating meeting in owner's calendar: {owner_calendar_id}")
                 
@@ -221,24 +223,142 @@ class DualCalendarCreator:
                     except Exception as oauth_no_att_error:
                         logger.warning(f"❌ OAuth without attendees failed: {oauth_no_att_error}")
         
-        # Strategy 2: Service Account approach - single attempt
+        # Strategy 2: Service Account specific approach
         elif has_conference and not is_oauth_calendar:
             logger.info("🔄 Using Service Account Google Meet creation...")
+            
+            for version in [1, 0]:  # Try both conference data versions
+                try:
+                    logger.info(f"🔄 Attempting Google Meet creation with conferenceDataVersion={version}")
+                    
+                    if version == 0:
+                        # For version 0, try without conferenceDataVersion parameter
+                        event = self.calendar_service._service.events().insert(
+                            calendarId=calendar_id,
+                            body=event_data
+                        ).execute()
+                    else:
+                        # For version 1, explicitly set conferenceDataVersion
+                        event = self.calendar_service._service.events().insert(
+                            calendarId=calendar_id,
+                            body=event_data,
+                            conferenceDataVersion=version
+                        ).execute()
+                    
+                    # Check if Google Meet was actually created
+                    if event.get('conferenceData') and event.get('conferenceData').get('conferenceId'):
+                        logger.info(f"✅ SUCCESS: Service Account created Google Meet (version {version})")
+                        logger.info(f"🔗 Google Meet ID: {event.get('conferenceData').get('conferenceId')}")
+                        return event
+                    else:
+                        logger.warning(f"⚠️ Event created but no Google Meet generated (version {version})")
+                        
+                except Exception as version_error:
+                    logger.warning(f"❌ conferenceDataVersion {version} failed: {version_error}")
+                    continue
+        
+        # Strategy 3: Universal alternative conference data formats (both OAuth and Service Account)
+        if has_conference:
+            logger.info("🔄 Trying universal Google Meet formats...")
+            
+            # Choose formats based on calendar type
+            if is_oauth_calendar:
+                alternative_formats = [
+                    # OAuth Format 1: Minimal request without conferenceSolutionKey
+                    {
+                        'conferenceData': {
+                            'createRequest': {
+                                'requestId': f"oauth-min-{int(datetime.now().timestamp())}"
+                            }
+                        }
+                    }
+                ]
+            else:
+                alternative_formats = [
+                    # Service Account Format 1: Explicit hangouts meet request  
+                    {
+                        'conferenceData': {
+                            'createRequest': {
+                                'requestId': f"meet-hang-{int(datetime.now().timestamp())}",
+                                'conferenceSolutionKey': {'type': 'hangoutsMeet'}
+                            }
+                        }
+                    },
+                    # Service Account Format 2: Conference with entry points
+                    {
+                        'conferenceData': {
+                            'conferenceSolution': {
+                                'key': {'type': 'hangoutsMeet'},
+                                'name': 'Google Meet'
+                            },
+                            'createRequest': {
+                                'requestId': f"meet-alt-{int(datetime.now().timestamp())}"
+                            }
+                        }
+                    }
+                ]
+            
+            for i, alt_format in enumerate(alternative_formats):
+                try:
+                    alt_event_data = event_data.copy()
+                    alt_event_data.update(alt_format)
+                    
+                    logger.info(f"🔄 Trying {calendar_type} alternative format {i+1}/{len(alternative_formats)}")
+                    
+                    # OAuth calendars prefer no conferenceDataVersion
+                    if is_oauth_calendar:
+                        event = self.calendar_service._service.events().insert(
+                            calendarId=calendar_id,
+                            body=alt_event_data
+                        ).execute()
+                    else:
+                        event = self.calendar_service._service.events().insert(
+                            calendarId=calendar_id,
+                            body=alt_event_data,
+                            conferenceDataVersion=1
+                        ).execute()
+                    
+                    # Verify Google Meet was created
+                    if event.get('conferenceData') and event.get('conferenceData').get('conferenceId'):
+                        logger.info(f"✅ SUCCESS: Alternative format {i+1} created Google Meet!")
+                        return event
+                    else:
+                        logger.warning(f"⚠️ Alternative format {i+1} created event but no Google Meet")
+                        
+                except Exception as alt_error:
+                    logger.warning(f"❌ Alternative format {i+1} failed: {alt_error}")
+                    continue
+        
+        # Strategy 4: Handle attendee errors but keep trying Google Meet
+        if has_attendees:
+            logger.info("🔄 Retrying without attendees but keeping Google Meet...")
             try:
-                event = self.calendar_service._service.events().insert(
-                    calendarId=calendar_id,
-                    body=event_data,
-                    conferenceDataVersion=1
-                ).execute()
+                no_attendees_data = event_data.copy()
+                no_attendees_data.pop('attendees', None)
+                
+                # Apply calendar-specific approach for no attendees strategy
+                if is_oauth_calendar:
+                    event = self.calendar_service._service.events().insert(
+                        calendarId=calendar_id,
+                        body=no_attendees_data
+                    ).execute()
+                else:
+                    event = self.calendar_service._service.events().insert(
+                        calendarId=calendar_id,
+                        body=no_attendees_data,
+                        conferenceDataVersion=1
+                    ).execute()
                 
                 if event.get('conferenceData'):
-                    logger.info(f"✅ SUCCESS: Service Account created Google Meet")
+                    logger.info(f"✅ SUCCESS: Created Google Meet without attendees in {calendar_type}'s calendar")
                     return event
+                else:
+                    logger.warning(f"⚠️ Event created without attendees but no Google Meet")
                     
-            except Exception as sa_error:
-                logger.warning(f"❌ Service Account Google Meet failed: {sa_error}")
+            except Exception as no_attendees_error:
+                logger.warning(f"❌ No attendees attempt failed: {no_attendees_error}")
         
-        # Strategy 3: Create basic event without Google Meet (last resort)
+        # Strategy 5: Create basic event without Google Meet (last resort)
         logger.warning(f"⚠️ FALLBACK: Creating basic event without Google Meet in {calendar_type}'s calendar")
         try:
             basic_event_data = event_data.copy()
@@ -346,7 +466,6 @@ class DualCalendarCreator:
         
         # Delete from owner's calendar (if different from manager)
         if owner_calendar_id and owner_calendar_id != manager_calendar_id:
-            # Ensure we don't create duplicate events in the same calendar
             try:
                 success = self._delete_from_calendar(
                     event_id, 
@@ -455,51 +574,6 @@ class DualCalendarCreator:
             
         return results
     
-
-    def delete_all_events_for_meeting(self, meeting_data: dict) -> dict:
-        """Delete ALL events created for a meeting (handles multiple events per calendar)"""
-        results = {
-            'success': False,
-            'deleted_count': 0,
-            'errors': []
-        }
-        
-        # Get all possible event IDs
-        event_ids = []
-        if meeting_data.get('google_event_id'):
-            event_ids.append(meeting_data['google_event_id'])
-        if meeting_data.get('google_manager_event_id'):
-            event_ids.append(meeting_data['google_manager_event_id'])
-        if meeting_data.get('google_owner_event_id'):
-            event_ids.append(meeting_data['google_owner_event_id'])
-        
-        # Remove duplicates
-        event_ids = list(set(event_ids))
-        
-        calendars = []
-        if meeting_data.get('manager_calendar_id'):
-            calendars.append(meeting_data['manager_calendar_id'])
-        if meeting_data.get('owner_calendar_id'):
-            calendars.append(meeting_data['owner_calendar_id'])
-        
-        # Try to delete each event from each calendar
-        for calendar_id in calendars:
-            for event_id in event_ids:
-                try:
-                    self.calendar_service._service.events().delete(
-                        calendarId=calendar_id,
-                        eventId=event_id
-                    ).execute()
-                    results['deleted_count'] += 1
-                    logger.info(f"✅ Deleted event {event_id} from calendar {calendar_id}")
-                except Exception as e:
-                    # Не логируем 404 ошибки - это нормально
-                    if "404" not in str(e):
-                        results['errors'].append(f"Failed to delete {event_id} from {calendar_id}: {e}")
-        
-        results['success'] = results['deleted_count'] > 0
-        return results
-
     def _delete_from_calendar(
         self, 
         event_id: str, 

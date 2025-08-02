@@ -1,0 +1,51 @@
+{
+  "timestamp": "2025-08-02T10:01:56.316455",
+  "fixes_applied": [
+    {
+      "status": "fixed",
+      "fix_info": {
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+        "rollback_id": "rollback_20250802_100156_f28c5e34",
+        "issues_fixed": [
+          {
+            "type": "excessive_insert_calls",
+            "description": "Найдено 9 вызовов events().insert, ожидалось не более 3",
+            "severity": "critical"
+          },
+          {
+            "type": "duplicate_calls_in_method",
+            "method": "_create_event_with_fallback",
+            "calls": 9,
+            "severity": "critical"
+          }
+        ],
+        "timestamp": "2025-08-02T10:01:56.318143",
+        "changes": "Removed duplicate events().insert calls in fallback strategies"
+      },
+      "rollback_id": "rollback_20250802_100156_f28c5e34"
+    },
+    {
+      "status": "fixed",
+      "fix_info": {
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/services/meeting_service.py",
+        "rollback_id": "rollback_20250802_100156_64a872dd",
+        "issues_fixed": "Removed 1 duplicate creation calls",
+        "timestamp": "2025-08-02T10:01:56.319053"
+      }
+    }
+  ],
+  "rollback_points": [
+    "rollback_20250802_100156_f28c5e34",
+    "rollback_20250802_100156_64a872dd"
+  ],
+  "errors": [],
+  "consolidation_plan": {
+    "primary_service": "google_calendar_dual.py",
+    "deprecated_service": "google_calendar.py",
+    "consolidation_steps": [
+      "Migrate all functionality to DualCalendarCreator",
+      "Update imports across the codebase",
+      "Remove deprecated single calendar service"
+    ]
+  }
+}

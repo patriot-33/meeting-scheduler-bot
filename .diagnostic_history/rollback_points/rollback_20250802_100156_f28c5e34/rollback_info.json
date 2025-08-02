@@ -1,0 +1,6 @@
+{
+  "rollback_id": "rollback_20250802_100156_f28c5e34",
+  "original_file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+  "backup_file": "/Users/evgenii/meeting-scheduler-bot/.diagnostic_history/rollback_points/rollback_20250802_100156_f28c5e34/google_calendar_dual.py",
+  "timestamp": "2025-08-02T10:01:56.317178"
+}

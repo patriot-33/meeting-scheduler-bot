@@ -1,0 +1,61 @@
+{
+  "timestamp": "2025-08-02T10:03:44.981765",
+  "fixes": [
+    {
+      "status": "fixed",
+      "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+      "rollback_id": "rollback_20250802_100344_e00cc487",
+      "fixes_applied": [
+        "Исправлена логика создания в обоих календарях",
+        "Убрано дублирование в fallback стратегиях"
+      ]
+    },
+    {
+      "status": "fixed",
+      "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+      "rollback_id": "rollback_20250802_100344_b5ddb8f0",
+      "new_method": "delete_all_events_for_meeting"
+    },
+    {
+      "status": "reviewed_and_fixed",
+      "fixes_applied": [
+        "Упрощена базовая conferenceData"
+      ]
+    }
+  ],
+  "rollback_points": [
+    "rollback_20250802_100344_e00cc487",
+    "rollback_20250802_100344_b5ddb8f0"
+  ],
+  "root_cause_analysis": {
+    "dual_calendar_service": {
+      "method_exists": true,
+      "creates_in_manager_calendar": true,
+      "creates_in_owner_calendar": true,
+      "uses_same_calendar_twice": false,
+      "fallback_strategies": 3
+    },
+    "meeting_service_calls": {
+      "dual_calendar_calls": [
+        126
+      ],
+      "single_calendar_calls": [],
+      "total_creation_calls": 1
+    },
+    "event_creation_flow": {
+      "entry_point": "MeetingService.create_meeting",
+      "steps": [
+        "1. MeetingService.create_meeting() вызывается",
+        "2. dual_calendar_creator.create_meeting_in_both_calendars()",
+        "3. Создается событие в manager календаре",
+        "4. Создается событие в owner календаре (если отличается)",
+        "5. Fallback стратегии при ошибках"
+      ],
+      "potential_duplication_points": [
+        "Если manager_calendar_id == owner_calendar_id, событие создается дважды",
+        "Fallback может создать дополнительные события",
+        "Ошибки в _create_event_with_fallback могут приводить к множественным попыткам"
+      ]
+    }
+  }
+}

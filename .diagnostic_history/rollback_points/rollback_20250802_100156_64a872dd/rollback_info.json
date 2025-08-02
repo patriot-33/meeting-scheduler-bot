@@ -1,0 +1,6 @@
+{
+  "rollback_id": "rollback_20250802_100156_64a872dd",
+  "original_file": "/Users/evgenii/meeting-scheduler-bot/src/services/meeting_service.py",
+  "backup_file": "/Users/evgenii/meeting-scheduler-bot/.diagnostic_history/rollback_points/rollback_20250802_100156_64a872dd/meeting_service.py",
+  "timestamp": "2025-08-02T10:01:56.318576"
+}

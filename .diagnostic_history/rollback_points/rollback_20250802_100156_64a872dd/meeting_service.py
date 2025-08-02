@@ -144,8 +144,41 @@ class MeetingService:
                     except Exception as calendar_error:
                         logger.error(f"❌ CALENDAR ERROR: Failed to create in {calendar_owner_name}'s calendar: {calendar_error}")
                         
-                        # Propagate the error - no fallback duplication
-                        raise calendar_error
+                        # If manager's calendar failed, try owner's calendar as fallback
+                        if "manager" in calendar_owner_name:
+                            logger.info("🔄 FALLBACK: Trying owner's calendar...")
+                            owners_with_calendar = self.db.query(User).filter(
+                                User.role == UserRole.OWNER,
+                                User.oauth_credentials.isnot(None),
+                                User.google_calendar_id.isnot(None)
+                            ).all()
+                            
+                            if owners_with_calendar:
+                                fallback_owner = owners_with_calendar[0]
+                                logger.info(f"🔄 FALLBACK: Using owner {fallback_owner.first_name}'s calendar: {fallback_owner.google_calendar_id}")
+                                
+                                # Use dual calendar creator for fallback too
+                                result = self.dual_calendar_creator.create_meeting_in_both_calendars(
+                                    manager_calendar_id=fallback_owner.google_calendar_id,
+                                    owner_calendar_id=fallback_owner.google_calendar_id,
+                                    manager_name=f"{manager.first_name} {manager.last_name}",
+                                    owner_name=f"{fallback_owner.first_name} {fallback_owner.last_name}",
+                                    manager_email=manager_email,
+                                    owner_email=fallback_owner.email,
+                                    department=manager.department.value,
+                                    scheduled_time=scheduled_time,
+                                    time_str=time_str
+                                )
+                                
+                                if result['success']:
+                                    event_id = result['manager_event_id'] or result['owner_event_id']
+                                    meet_link = result['meet_link']
+                                else:
+                                    raise Exception(f"Fallback failed: {', '.join(result['errors'])}")
+                            else:
+                                raise calendar_error
+                        else:
+                            raise calendar_error
                 else:
                     # No owners have connected their calendars via OAuth
                     logger.error(f"❌ CALENDAR SETUP REQUIRED: No users have connected their Google Calendar via OAuth")
@@ -256,20 +289,19 @@ class MeetingService:
                     except (json.JSONDecodeError, TypeError) as e:
                         logger.warning(f"Failed to parse fallback owner OAuth credentials: {e}")
             
-            # CRITICAL FIX: Use new method to delete ALL events for this meeting
-            meeting_data = {
-                'google_event_id': meeting.google_event_id,
-                'google_manager_event_id': meeting.google_manager_event_id,
-                'google_owner_event_id': meeting.google_owner_event_id,
-                'manager_calendar_id': manager.google_calendar_id if manager else None,
-                'owner_calendar_id': owner_with_calendar.google_calendar_id if owner_with_calendar else meeting.google_calendar_id
-            }
-            
-            deletion_results = self.dual_calendar_creator.delete_all_events_for_meeting(meeting_data)
+            # Try to delete from both calendars using DualCalendarCreator with proper event IDs
+            deletion_results = self.dual_calendar_creator.delete_meeting_from_both_calendars_dual(
+                manager_event_id=meeting.google_manager_event_id or meeting.google_event_id,
+                owner_event_id=meeting.google_owner_event_id or meeting.google_event_id,
+                manager_calendar_id=manager.google_calendar_id if manager else None,
+                owner_calendar_id=owner_with_calendar.google_calendar_id if owner_with_calendar else meeting.google_calendar_id,
+                manager_oauth_credentials=manager_oauth_creds,
+                owner_oauth_credentials=owner_oauth_creds
+            )
             
             # Log deletion results
             if deletion_results['success']:
-                logger.info(f"✅ Successfully deleted {deletion_results['deleted_count']} events from calendars")
+                logger.info(f"✅ Successfully deleted meeting from {deletion_results['total_deleted']} calendar(s)")
                 if deletion_results['errors']:
                     logger.warning(f"⚠️ Some deletion errors occurred: {deletion_results['errors']}")
             else:

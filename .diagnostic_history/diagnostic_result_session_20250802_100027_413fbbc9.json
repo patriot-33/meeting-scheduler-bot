@@ -1,0 +1,524 @@
+{
+  "session_id": "session_20250802_100027_413fbbc9",
+  "timestamp": "2025-08-02T10:00:27.419267",
+  "status": "analysis_complete",
+  "system_analysis": {
+    "timestamp": "2025-08-02T10:00:27.352843",
+    "total_python_files": 60,
+    "project_structure": {
+      "src_directory": "/Users/evgenii/meeting-scheduler-bot/src",
+      "has_database": true,
+      "has_services": true,
+      "has_handlers": true,
+      "has_config": true,
+      "has_tests": true,
+      "has_requirements": true,
+      "has_docker": true
+    },
+    "critical_files": [
+      "/Users/evgenii/meeting-scheduler-bot/src/database.py",
+      "/Users/evgenii/meeting-scheduler-bot/src/main.py",
+      "/Users/evgenii/meeting-scheduler-bot/src/config.py",
+      "/Users/evgenii/meeting-scheduler-bot/src/services/meeting_service.py",
+      "/Users/evgenii/meeting-scheduler-bot/migrations/add_google_calendar_id_field.py",
+      "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+      "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar.py",
+      "/Users/evgenii/meeting-scheduler-bot/src/services/oauth_service.py"
+    ],
+    "dependencies": {
+      "internal": [],
+      "external": [],
+      "database_related": [
+        "debug_get_db_error.py: from database import get_db, User, UserRole",
+        "test_get_db_issue.py: from database import get_db, User, UserRole",
+        "test_get_db_issue.py: from database import get_db, User, UserRole",
+        "test_security.py: from src.database import User, UserRole",
+        "test_validation_improvements.py: from utils.database_health import check_database_health",
+        "main.py: from database import init_db",
+        "main.py: from sqlalchemy.exc import DataError, IntegrityError, DatabaseError, OperationalError",
+        "main.py: from database import get_db, User, UserRole",
+        "database_health.py: from database import engine, get_db, User",
+        "database_health.py: from database import init_db",
+        "health_check.py: from database import engine",
+        "decorators.py: from database import get_db, User, UserRole",
+        "decorators.py: from database import Department",
+        "registration.py: from database import get_db, User, UserRole, Department",
+        "check_oauth_status.py: from database import SessionLocal, User",
+        "owner.py: from database import get_db, User, UserRole, Department, UserStatus",
+        "manager_calendar.py: from database import get_db, User, UserRole",
+        "manager_calendar.py: from database import get_db as db_context_manager",
+        "manager_calendar.py: from database import get_db as db_context_manager",
+        "manager_calendar.py: from database import get_db as db_context_manager",
+        "manager_calendar.py: from database import get_db as db_context_manager",
+        "admin.py: from database import get_db, User, Meeting, UserRole, UserStatus, MeetingStatus, Department",
+        "common.py: from database import get_db, User, UserRole",
+        "common.py: from database import Department",
+        "manager_calendar_simple.py: from database import get_db, User, UserRole",
+        "manager.py: from database import get_db, User, UserRole, UserStatus, Meeting, MeetingStatus",
+        "reminder_service.py: from database import get_db, User, Meeting, Reminder, UserStatus, MeetingStatus",
+        "meeting_service.py: from database import Meeting, User, MeetingStatus, UserStatus, UserRole",
+        "oauth_service.py: from database import get_db, User",
+        "google_calendar_dual.py: from database import get_db, User, UserRole",
+        "google_calendar.py: from database import get_db, User",
+        "user_service.py: from database import User, UserRole, UserStatus",
+        "oauth_public_service.py: from database import get_db, User",
+        "owner_service.py: from database import get_db, User, UserRole, OwnerAvailability, OwnerBlockedTime",
+        "owner_service.py: from database import get_db, User, UserRole"
+      ],
+      "calendar_related": [
+        "test_calendar_fix.py: from handlers.manager_calendar import connect_calendar",
+        "test_calendar_fix.py: from handlers import manager_calendar",
+        "debug_get_db_error.py: from handlers.manager_calendar import connect_calendar",
+        "test_fixes_validation.py: from services.google_calendar_dual import DualCalendarCreator",
+        "test_fixes_validation.py: from services.google_calendar_dual import DualCalendarCreator",
+        "test_get_db_issue.py: import handlers.manager_calendar as mc",
+        "test_security.py: from src.handlers.manager_calendar_simple import set_calendar_id",
+        "test_critical_paths.py: from handlers.manager_calendar import safe_send_message",
+        "test_critical_paths.py: from services.google_calendar import GoogleCalendarService",
+        "database.py: from migrations.add_calendar_connected_field import upgrade",
+        "main.py: from handlers import registration, admin, manager, common, owner, manager_calendar, manager_calendar_simple, check_oauth_status",
+        "main.py: from migrations.add_google_calendar_id_field import upgrade",
+        "manager_calendar.py: from services.google_calendar import google_calendar_service as calendar_service",
+        "manager_calendar.py: from services.google_calendar import google_calendar_service as calendar_service",
+        "manager_calendar.py: from handlers.manager_calendar_simple import simple_calendar_connect",
+        "manager_calendar_simple.py: from services.google_calendar import google_calendar_service as calendar_service",
+        "manager.py: from services.google_calendar import google_calendar_service",
+        "meeting_service.py: from services.google_calendar import google_calendar_service",
+        "meeting_service.py: from services.google_calendar_dual import DualCalendarCreator",
+        "oauth_service.py: from google.auth.transport.requests import Request",
+        "oauth_service.py: from google.oauth2.credentials import Credentials",
+        "oauth_service.py: from google_auth_oauthlib.flow import Flow",
+        "oauth_service.py: from googleapiclient.discovery import build",
+        "__init__.py: from . import google_calendar",
+        "google_calendar.py: from google.oauth2 import service_account",
+        "google_calendar.py: from googleapiclient.discovery import build",
+        "google_calendar.py: from googleapiclient.errors import HttpError",
+        "google_calendar.py: from google.auth import default",
+        "oauth_public_service.py: from google.auth.transport.requests import Request",
+        "oauth_public_service.py: from google.oauth2.credentials import Credentials",
+        "oauth_public_service.py: from googleapiclient.discovery import build",
+        "owner_service.py: from services.google_calendar import google_calendar_service",
+        "owner_service.py: from services.google_calendar import google_calendar_service"
+      ],
+      "telegram_related": [
+        "clear_webhook.py: from telegram import Bot",
+        "test_telegram_safe.py: from utils.telegram_safe import safe_send_message, safe_edit_message, safe_reply_text, safe_context_send",
+        "test_telegram_safe.py: from utils.telegram_safe import safe_send_message",
+        "test_telegram_safe.py: from telegram.error import BadRequest",
+        "test_telegram_safe.py: from utils.telegram_safe import safe_send_message",
+        "test_telegram_safe.py: from telegram.error import BadRequest",
+        "main.py: from telegram import Update",
+        "main.py: from telegram.ext import (",
+        "main.py: from telegram.error import TelegramError, NetworkError, TimedOut",
+        "telegram_safe.py: from telegram import Update, InlineKeyboardMarkup",
+        "telegram_safe.py: from telegram.ext import ContextTypes",
+        "telegram_safe.py: from telegram.error import BadRequest, NetworkError, TimedOut, Forbidden, TelegramError",
+        "decorators.py: from telegram import Update",
+        "decorators.py: from telegram.ext import ContextTypes",
+        "registration.py: from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup",
+        "registration.py: from telegram.ext import (",
+        "check_oauth_status.py: from telegram import Update",
+        "check_oauth_status.py: from telegram.ext import CommandHandler, ContextTypes",
+        "owner.py: from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup",
+        "owner.py: from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, CallbackQueryHandler, MessageHandler, filters",
+        "owner.py: from utils.telegram_safe import telegram_safe",
+        "manager_calendar.py: from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup",
+        "manager_calendar.py: from telegram.ext import ContextTypes",
+        "manager_calendar.py: from telegram.error import BadRequest",
+        "manager_calendar.py: from utils.telegram_safe import safe_send_message, safe_context_send",
+        "admin.py: from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup",
+        "admin.py: from telegram.ext import ContextTypes",
+        "common.py: from telegram import Update",
+        "common.py: from telegram.ext import ContextTypes",
+        "manager_calendar_simple.py: from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup",
+        "manager_calendar_simple.py: from telegram.ext import ContextTypes",
+        "owner_slots.py: from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup",
+        "owner_slots.py: from telegram.ext import ContextTypes, ConversationHandler",
+        "manager.py: from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup",
+        "manager.py: from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler",
+        "reminder_service.py: from telegram import Bot",
+        "meeting_service.py: from telegram.ext import Application"
+      ]
+    },
+    "problem_patterns": [
+      {
+        "type": "potential_duplication",
+        "description": "Найдено 7 файлов с calendar в имени",
+        "files": [
+          "/Users/evgenii/meeting-scheduler-bot/test_calendar_fix.py",
+          "/Users/evgenii/meeting-scheduler-bot/migrations/add_google_calendar_id_field.py",
+          "/Users/evgenii/meeting-scheduler-bot/migrations/add_calendar_connected_field.py",
+          "/Users/evgenii/meeting-scheduler-bot/src/handlers/manager_calendar.py",
+          "/Users/evgenii/meeting-scheduler-bot/src/handlers/manager_calendar_simple.py",
+          "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+          "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar.py"
+        ],
+        "severity": "medium"
+      },
+      {
+        "type": "large_file",
+        "description": "Большой файл: 713 строк",
+        "file": "/Users/evgenii/meeting-scheduler-bot/diagnostic_system_v4.py",
+        "lines": 713,
+        "severity": "low"
+      },
+      {
+        "type": "large_file",
+        "description": "Большой файл: 601 строк",
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/utils/startup_validation.py",
+        "lines": 601,
+        "severity": "low"
+      },
+      {
+        "type": "large_file",
+        "description": "Большой файл: 637 строк",
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/diagnostic_system/system_analyzer.py",
+        "lines": 637,
+        "severity": "low"
+      },
+      {
+        "type": "large_file",
+        "description": "Большой файл: 1081 строк",
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/diagnostic_system/deep_diagnostics.py",
+        "lines": 1081,
+        "severity": "low"
+      },
+      {
+        "type": "large_file",
+        "description": "Большой файл: 1085 строк",
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/diagnostic_system/safe_repair_engine.py",
+        "lines": 1085,
+        "severity": "low"
+      },
+      {
+        "type": "large_file",
+        "description": "Большой файл: 1043 строк",
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/diagnostic_system/continuous_validator.py",
+        "lines": 1043,
+        "severity": "low"
+      },
+      {
+        "type": "large_file",
+        "description": "Большой файл: 778 строк",
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/diagnostic_system/invariant_detector.py",
+        "lines": 778,
+        "severity": "low"
+      },
+      {
+        "type": "large_file",
+        "description": "Большой файл: 964 строк",
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/diagnostic_system/change_documentation.py",
+        "lines": 964,
+        "severity": "low"
+      },
+      {
+        "type": "large_file",
+        "description": "Большой файл: 695 строк",
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/diagnostic_system/holistic_system.py",
+        "lines": 695,
+        "severity": "low"
+      },
+      {
+        "type": "large_file",
+        "description": "Большой файл: 754 строк",
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/handlers/owner.py",
+        "lines": 754,
+        "severity": "low"
+      },
+      {
+        "type": "large_file",
+        "description": "Большой файл: 539 строк",
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/handlers/manager_calendar.py",
+        "lines": 539,
+        "severity": "low"
+      },
+      {
+        "type": "large_file",
+        "description": "Большой файл: 670 строк",
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/handlers/manager.py",
+        "lines": 670,
+        "severity": "low"
+      },
+      {
+        "type": "large_file",
+        "description": "Большой файл: 637 строк",
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+        "lines": 637,
+        "severity": "low"
+      },
+      {
+        "type": "large_file",
+        "description": "Большой файл: 640 строк",
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar.py",
+        "lines": 640,
+        "severity": "low"
+      },
+      {
+        "type": "large_file",
+        "description": "Большой файл: 505 строк",
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/services/owner_service.py",
+        "lines": 505,
+        "severity": "low"
+      }
+    ],
+    "analysis_time": 0.108331
+  },
+  "meeting_duplication_analysis": {
+    "problems_detected": [],
+    "root_causes": [
+      {
+        "type": "multiple_creation_paths",
+        "description": "Обнаружено 9 различных методов создания встреч",
+        "severity": "high",
+        "impact": "Может приводить к множественному созданию событий"
+      },
+      {
+        "type": "event_duplication_in_code",
+        "description": "Множественные вызовы events().insert в /Users/evgenii/meeting-scheduler-bot/diagnostic_system_v4.py",
+        "severity": "critical",
+        "impact": "Прямое дублирование событий в календаре"
+      },
+      {
+        "type": "event_duplication_in_code",
+        "description": "Множественные вызовы events().insert в /Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+        "severity": "critical",
+        "impact": "Прямое дублирование событий в календаре"
+      },
+      {
+        "type": "event_duplication_in_code",
+        "description": "Множественные вызовы events().insert в /Users/evgenii/meeting-scheduler-bot/src/services/google_calendar.py",
+        "severity": "critical",
+        "impact": "Прямое дублирование событий в календаре"
+      }
+    ],
+    "affected_files": [
+      "/Users/evgenii/meeting-scheduler-bot/test_calendar_fix.py",
+      "/Users/evgenii/meeting-scheduler-bot/migrations/add_google_calendar_id_field.py",
+      "/Users/evgenii/meeting-scheduler-bot/migrations/add_calendar_connected_field.py",
+      "/Users/evgenii/meeting-scheduler-bot/src/handlers/manager_calendar.py",
+      "/Users/evgenii/meeting-scheduler-bot/src/handlers/manager_calendar_simple.py",
+      "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+      "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar.py",
+      "/Users/evgenii/meeting-scheduler-bot/src/services/meeting_service.py",
+      "/Users/evgenii/meeting-scheduler-bot/migrations/add_google_calendar_id_field.py",
+      "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+      "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar.py"
+    ],
+    "fix_recommendations": [
+      {
+        "priority": "high",
+        "action": "consolidate_creation_logic",
+        "description": "Объединить всю логику создания встреч в один метод",
+        "steps": [
+          "Найти все места создания встреч",
+          "Создать единый сервис для создания",
+          "Рефакторить все вызовы через единый интерфейс"
+        ]
+      },
+      {
+        "priority": "critical",
+        "action": "remove_code_duplication",
+        "description": "Убрать дублирование вызовов events().insert",
+        "steps": [
+          "Найти все множественные вызовы events().insert",
+          "Оставить только один вызов на одно событие",
+          "Реализовать проверку на дублирование"
+        ]
+      },
+      {
+        "priority": "critical",
+        "action": "remove_code_duplication",
+        "description": "Убрать дублирование вызовов events().insert",
+        "steps": [
+          "Найти все множественные вызовы events().insert",
+          "Оставить только один вызов на одно событие",
+          "Реализовать проверку на дублирование"
+        ]
+      },
+      {
+        "priority": "critical",
+        "action": "remove_code_duplication",
+        "description": "Убрать дублирование вызовов events().insert",
+        "steps": [
+          "Найти все множественные вызовы events().insert",
+          "Оставить только один вызов на одно событие",
+          "Реализовать проверку на дублирование"
+        ]
+      }
+    ],
+    "creation_analysis": {
+      "creation_methods": [
+        {
+          "file": "/Users/evgenii/meeting-scheduler-bot/test_fixes_validation.py",
+          "method": "create_meeting",
+          "line_count": 1
+        },
+        {
+          "file": "/Users/evgenii/meeting-scheduler-bot/diagnostic_system_v4.py",
+          "method": "create_meeting",
+          "line_count": 3
+        },
+        {
+          "file": "/Users/evgenii/meeting-scheduler-bot/diagnostic_system_v4.py",
+          "method": "create_event",
+          "line_count": 3
+        },
+        {
+          "file": "/Users/evgenii/meeting-scheduler-bot/src/handlers/manager.py",
+          "method": "create_meeting",
+          "line_count": 1
+        },
+        {
+          "file": "/Users/evgenii/meeting-scheduler-bot/src/services/meeting_service.py",
+          "method": "create_meeting",
+          "line_count": 3
+        },
+        {
+          "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+          "method": "create_meeting",
+          "line_count": 1
+        },
+        {
+          "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+          "method": "create_event",
+          "line_count": 3
+        },
+        {
+          "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar.py",
+          "method": "create_meeting",
+          "line_count": 1
+        },
+        {
+          "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar.py",
+          "method": "create_event",
+          "line_count": 1
+        }
+      ],
+      "potential_duplications": [
+        {
+          "file": "/Users/evgenii/meeting-scheduler-bot/diagnostic_system_v4.py",
+          "description": "Множественные вызовы events().insert: 6"
+        },
+        {
+          "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+          "description": "Множественные вызовы events().insert: 9"
+        },
+        {
+          "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar.py",
+          "description": "Множественные вызовы events().insert: 6"
+        }
+      ],
+      "calendar_services": []
+    },
+    "deletion_analysis": {
+      "deletion_methods": [
+        {
+          "file": "/Users/evgenii/meeting-scheduler-bot/test_fixes_validation.py",
+          "has_cancel": false,
+          "has_delete": true
+        },
+        {
+          "file": "/Users/evgenii/meeting-scheduler-bot/diagnostic_system_v4.py",
+          "has_cancel": true,
+          "has_delete": true
+        },
+        {
+          "file": "/Users/evgenii/meeting-scheduler-bot/src/handlers/manager.py",
+          "has_cancel": true,
+          "has_delete": false
+        },
+        {
+          "file": "/Users/evgenii/meeting-scheduler-bot/src/services/meeting_service.py",
+          "has_cancel": true,
+          "has_delete": true
+        },
+        {
+          "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+          "has_cancel": false,
+          "has_delete": true
+        },
+        {
+          "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar.py",
+          "has_cancel": true,
+          "has_delete": false
+        }
+      ],
+      "potential_issues": []
+    }
+  },
+  "google_meet_analysis": {
+    "conference_creation_methods": [
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/diagnostic_system_v4.py",
+        "line_count": 5,
+        "has_create_request": true,
+        "has_conference_version": true
+      },
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+        "line_count": 29,
+        "has_create_request": true,
+        "has_conference_version": true
+      },
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar.py",
+        "line_count": 17,
+        "has_create_request": true,
+        "has_conference_version": true
+      }
+    ],
+    "oauth_vs_service_account": {
+      "service_account_usage": true,
+      "oauth_usage": true
+    },
+    "potential_issues": [
+      {
+        "type": "multiple_conference_creation",
+        "description": "Множественные методы создания Google Meet конференций"
+      }
+    ]
+  },
+  "critical_issues_count": 3,
+  "fix_recommendations": [
+    {
+      "priority": "high",
+      "action": "consolidate_creation_logic",
+      "description": "Объединить всю логику создания встреч в один метод",
+      "steps": [
+        "Найти все места создания встреч",
+        "Создать единый сервис для создания",
+        "Рефакторить все вызовы через единый интерфейс"
+      ]
+    },
+    {
+      "priority": "critical",
+      "action": "remove_code_duplication",
+      "description": "Убрать дублирование вызовов events().insert",
+      "steps": [
+        "Найти все множественные вызовы events().insert",
+        "Оставить только один вызов на одно событие",
+        "Реализовать проверку на дублирование"
+      ]
+    },
+    {
+      "priority": "critical",
+      "action": "remove_code_duplication",
+      "description": "Убрать дублирование вызовов events().insert",
+      "steps": [
+        "Найти все множественные вызовы events().insert",
+        "Оставить только один вызов на одно событие",
+        "Реализовать проверку на дублирование"
+      ]
+    },
+    {
+      "priority": "critical",
+      "action": "remove_code_duplication",
+      "description": "Убрать дублирование вызовов events().insert",
+      "steps": [
+        "Найти все множественные вызовы events().insert",
+        "Оставить только один вызов на одно событие",
+        "Реализовать проверку на дублирование"
+      ]
+    }
+  ]
+}

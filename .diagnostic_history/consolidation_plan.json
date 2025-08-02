@@ -1,0 +1,9 @@
+{
+  "primary_service": "google_calendar_dual.py",
+  "deprecated_service": "google_calendar.py",
+  "consolidation_steps": [
+    "Migrate all functionality to DualCalendarCreator",
+    "Update imports across the codebase",
+    "Remove deprecated single calendar service"
+  ]
+}

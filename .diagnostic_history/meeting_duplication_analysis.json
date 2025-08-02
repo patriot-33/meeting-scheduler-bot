@@ -1,0 +1,183 @@
+{
+  "problems_detected": [],
+  "root_causes": [
+    {
+      "type": "multiple_creation_paths",
+      "description": "Обнаружено 9 различных методов создания встреч",
+      "severity": "high",
+      "impact": "Может приводить к множественному созданию событий"
+    },
+    {
+      "type": "event_duplication_in_code",
+      "description": "Множественные вызовы events().insert в /Users/evgenii/meeting-scheduler-bot/diagnostic_system_v4.py",
+      "severity": "critical",
+      "impact": "Прямое дублирование событий в календаре"
+    },
+    {
+      "type": "event_duplication_in_code",
+      "description": "Множественные вызовы events().insert в /Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+      "severity": "critical",
+      "impact": "Прямое дублирование событий в календаре"
+    },
+    {
+      "type": "event_duplication_in_code",
+      "description": "Множественные вызовы events().insert в /Users/evgenii/meeting-scheduler-bot/src/services/google_calendar.py",
+      "severity": "critical",
+      "impact": "Прямое дублирование событий в календаре"
+    }
+  ],
+  "affected_files": [
+    "/Users/evgenii/meeting-scheduler-bot/test_calendar_fix.py",
+    "/Users/evgenii/meeting-scheduler-bot/migrations/add_google_calendar_id_field.py",
+    "/Users/evgenii/meeting-scheduler-bot/migrations/add_calendar_connected_field.py",
+    "/Users/evgenii/meeting-scheduler-bot/src/handlers/manager_calendar.py",
+    "/Users/evgenii/meeting-scheduler-bot/src/handlers/manager_calendar_simple.py",
+    "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+    "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar.py",
+    "/Users/evgenii/meeting-scheduler-bot/src/services/meeting_service.py",
+    "/Users/evgenii/meeting-scheduler-bot/migrations/add_google_calendar_id_field.py",
+    "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+    "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar.py"
+  ],
+  "fix_recommendations": [
+    {
+      "priority": "high",
+      "action": "consolidate_creation_logic",
+      "description": "Объединить всю логику создания встреч в один метод",
+      "steps": [
+        "Найти все места создания встреч",
+        "Создать единый сервис для создания",
+        "Рефакторить все вызовы через единый интерфейс"
+      ]
+    },
+    {
+      "priority": "critical",
+      "action": "remove_code_duplication",
+      "description": "Убрать дублирование вызовов events().insert",
+      "steps": [
+        "Найти все множественные вызовы events().insert",
+        "Оставить только один вызов на одно событие",
+        "Реализовать проверку на дублирование"
+      ]
+    },
+    {
+      "priority": "critical",
+      "action": "remove_code_duplication",
+      "description": "Убрать дублирование вызовов events().insert",
+      "steps": [
+        "Найти все множественные вызовы events().insert",
+        "Оставить только один вызов на одно событие",
+        "Реализовать проверку на дублирование"
+      ]
+    },
+    {
+      "priority": "critical",
+      "action": "remove_code_duplication",
+      "description": "Убрать дублирование вызовов events().insert",
+      "steps": [
+        "Найти все множественные вызовы events().insert",
+        "Оставить только один вызов на одно событие",
+        "Реализовать проверку на дублирование"
+      ]
+    }
+  ],
+  "creation_analysis": {
+    "creation_methods": [
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/test_fixes_validation.py",
+        "method": "create_meeting",
+        "line_count": 1
+      },
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/diagnostic_system_v4.py",
+        "method": "create_meeting",
+        "line_count": 3
+      },
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/diagnostic_system_v4.py",
+        "method": "create_event",
+        "line_count": 3
+      },
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/handlers/manager.py",
+        "method": "create_meeting",
+        "line_count": 1
+      },
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/services/meeting_service.py",
+        "method": "create_meeting",
+        "line_count": 3
+      },
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+        "method": "create_meeting",
+        "line_count": 1
+      },
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+        "method": "create_event",
+        "line_count": 3
+      },
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar.py",
+        "method": "create_meeting",
+        "line_count": 1
+      },
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar.py",
+        "method": "create_event",
+        "line_count": 1
+      }
+    ],
+    "potential_duplications": [
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/diagnostic_system_v4.py",
+        "description": "Множественные вызовы events().insert: 6"
+      },
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+        "description": "Множественные вызовы events().insert: 9"
+      },
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar.py",
+        "description": "Множественные вызовы events().insert: 6"
+      }
+    ],
+    "calendar_services": []
+  },
+  "deletion_analysis": {
+    "deletion_methods": [
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/test_fixes_validation.py",
+        "has_cancel": false,
+        "has_delete": true
+      },
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/diagnostic_system_v4.py",
+        "has_cancel": true,
+        "has_delete": true
+      },
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/handlers/manager.py",
+        "has_cancel": true,
+        "has_delete": false
+      },
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/services/meeting_service.py",
+        "has_cancel": true,
+        "has_delete": true
+      },
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar_dual.py",
+        "has_cancel": false,
+        "has_delete": true
+      },
+      {
+        "file": "/Users/evgenii/meeting-scheduler-bot/src/services/google_calendar.py",
+        "has_cancel": true,
+        "has_delete": false
+      }
+    ],
+    "potential_issues": []
+  }
+}
