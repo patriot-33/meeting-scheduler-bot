@@ -3,6 +3,7 @@ Enhanced Google Calendar service with dual calendar support
 Creates meetings in both manager and owner calendars
 """
 import logging
+import traceback
 from datetime import datetime, timedelta
 from config import settings
 from typing import Optional, List, Dict, Any
@@ -14,6 +15,8 @@ class DualCalendarCreator:
     
     def __init__(self, calendar_service):
         self.calendar_service = calendar_service
+        logger.error(f"🚑 DualCalendarCreator initialized with service: {calendar_service}")
+        logger.error(f"🚑 Service available: {getattr(calendar_service, 'is_available', 'NO_ATTR')}")
         
     def create_meeting_in_both_calendars(
         self,
@@ -31,6 +34,10 @@ class DualCalendarCreator:
         Create the same meeting in both manager and owner calendars.
         Returns dict with event_ids and meet_link.
         """
+        logger.error(f"🚑 EMERGENCY: create_meeting_in_both_calendars CALLED")
+        logger.error(f"🚑 Manager calendar: {manager_calendar_id}")
+        logger.error(f"🚑 Owner calendar: {owner_calendar_id}")
+        logger.error(f"🚑 Time: {scheduled_time} / {time_str}")
         results = {
             'success': False,
             'manager_event_id': None,
@@ -38,6 +45,17 @@ class DualCalendarCreator:
             'meet_link': None,
             'errors': []
         }
+        
+        # Check if calendar service is available
+        if not self.calendar_service:
+            logger.error(f"🚑 NO CALENDAR SERVICE!")
+            results['errors'].append("Calendar service not initialized")
+            return results
+            
+        if not hasattr(self.calendar_service, '_service'):
+            logger.error(f"🚑 Calendar service has no _service attribute!")
+            results['errors'].append("Calendar service not properly initialized")
+            return results
         
         # Parse time
         hour, minute = map(int, time_str.split(':'))
@@ -188,11 +206,21 @@ class DualCalendarCreator:
     def _create_event_with_fallback(self, calendar_id: str, event_data: dict, calendar_type: str):
         """Create event with OAuth-specific Google Meet conference creation - SINGLE CALL ONLY"""
         
+        # EMERGENCY LOGGING - Log everything
+        logger.error(f"🚑 EMERGENCY LOG: Starting _create_event_with_fallback")
+        logger.error(f"🚑 Calendar ID: {calendar_id}")
+        logger.error(f"🚑 Calendar Type: {calendar_type}")
+        
         # Log the attempt for debugging
         has_conference = 'conferenceData' in event_data
         has_attendees = 'attendees' in event_data
         logger.info(f"📅 Creating event in {calendar_type}'s calendar: {calendar_id}")
         logger.info(f"🔍 Event details: conference={has_conference}, attendees={has_attendees}")
+        
+        # Log conference data details
+        if has_conference:
+            conf_type = event_data.get('conferenceData', {}).get('createRequest', {}).get('conferenceSolutionKey', {}).get('type', 'UNKNOWN')
+            logger.error(f"🚑 Conference type: {conf_type}")
         
         # Detect calendar type: OAuth vs Service Account
         is_oauth_calendar = self._is_oauth_calendar(calendar_id)
@@ -200,20 +228,27 @@ class DualCalendarCreator:
         
         # SINGLE ATTEMPT - No multiple fallbacks to prevent duplication
         try:
+            logger.error(f"🚑 ATTEMPTING API CALL: OAuth={is_oauth_calendar}")
+            logger.error(f"🚑 Event data keys: {list(event_data.keys())}")
+            
             if is_oauth_calendar:
                 # OAuth calendars ALSO need conferenceDataVersion for Google Meet
+                logger.error(f"🚑 Making OAuth calendar insert call")
                 event = self.calendar_service._service.events().insert(
                     calendarId=calendar_id,
                     body=event_data,
                     conferenceDataVersion=1
                 ).execute()
+                logger.error(f"🚑 OAuth insert SUCCESS: {event.get('id', 'NO_ID')}")
             else:
                 # Service Account calendars need conferenceDataVersion
+                logger.error(f"🚑 Making Service Account calendar insert call")
                 event = self.calendar_service._service.events().insert(
                     calendarId=calendar_id,
                     body=event_data,
                     conferenceDataVersion=1
                 ).execute()
+                logger.error(f"🚑 Service Account insert SUCCESS: {event.get('id', 'NO_ID')}")
             
             # Check if Google Meet was created
             if event.get('conferenceData') and event.get('conferenceData').get('conferenceId'):
@@ -227,6 +262,8 @@ class DualCalendarCreator:
             
         except Exception as e:
             logger.error(f"❌ Failed to create event in {calendar_type}'s calendar: {e}")
+            logger.error(f"🚑 FULL ERROR: {type(e).__name__}: {str(e)}")
+            logger.error(f"🚑 TRACEBACK: {traceback.format_exc()}")
             return None
 
     def _is_valid_email(self, email: str) -> bool:
