@@ -339,17 +339,40 @@ class DualCalendarCreator:
         try:
             # If we have OAuth credentials for this specific calendar, use them
             if oauth_credentials:
-                # TODO: Implement OAuth service creation for specific user
-                # For now, use the main service (this is a limitation we need to address)
-                logger.warning(f"Using main service for {calendar_type} calendar deletion - OAuth not yet implemented")
+                logger.info(f"Using OAuth credentials for {calendar_type} calendar deletion")
+                
+                # Create OAuth service for specific user
+                from services.oauth_service import ManagerOAuthService
+                oauth_service = ManagerOAuthService()
+                user_calendar_service = oauth_service.create_calendar_service_from_credentials(oauth_credentials)
+                
+                if user_calendar_service:
+                    # Delete using OAuth service
+                    user_calendar_service.events().delete(
+                        calendarId=calendar_id,
+                        eventId=event_id
+                    ).execute()
+                    
+                    logger.info(f"✅ Successfully deleted event {event_id} from {calendar_type} calendar {calendar_id} using OAuth")
+                else:
+                    # Fallback to Service Account if OAuth failed
+                    logger.warning(f"Failed to create OAuth service, falling back to Service Account for {calendar_type}")
+                    self.calendar_service._service.events().delete(
+                        calendarId=calendar_id,
+                        eventId=event_id
+                    ).execute()
+                    
+                    logger.info(f"✅ Successfully deleted event {event_id} from {calendar_type} calendar {calendar_id} using Service Account fallback")
+            else:
+                # Fallback to main service (Service Account)
+                logger.info(f"Using Service Account for {calendar_type} calendar deletion")
+                self.calendar_service._service.events().delete(
+                    calendarId=calendar_id,
+                    eventId=event_id
+                ).execute()
+                
+                logger.info(f"✅ Successfully deleted event {event_id} from {calendar_type} calendar {calendar_id} using Service Account")
             
-            # Delete using the main calendar service
-            self.calendar_service._service.events().delete(
-                calendarId=calendar_id,
-                eventId=event_id
-            ).execute()
-            
-            logger.info(f"✅ Successfully deleted event {event_id} from {calendar_type} calendar {calendar_id}")
             return True
             
         except Exception as e:

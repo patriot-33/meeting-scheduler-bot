@@ -226,13 +226,59 @@ class MeetingService:
             # Get manager information for dual calendar deletion
             manager = self.db.query(User).filter(User.id == meeting.manager_id).first()
             
+            # Load OAuth credentials for manager
+            manager_oauth_creds = None
+            if manager and manager.oauth_credentials:
+                try:
+                    import json
+                    manager_oauth_creds = json.loads(manager.oauth_credentials)
+                except (json.JSONDecodeError, TypeError) as e:
+                    logger.warning(f"Failed to parse manager OAuth credentials: {e}")
+            
+            # Find owner with calendar by matching google_calendar_id
+            owner_with_calendar = None
+            owner_oauth_creds = None
+            
+            # First, try to find owner by calendar ID from meeting
+            if meeting.google_calendar_id:
+                owner_with_calendar = self.db.query(User).filter(
+                    User.role == UserRole.OWNER,
+                    User.google_calendar_id == meeting.google_calendar_id,
+                    User.oauth_credentials.isnot(None)
+                ).first()
+                
+                if owner_with_calendar and owner_with_calendar.oauth_credentials:
+                    try:
+                        import json
+                        owner_oauth_creds = json.loads(owner_with_calendar.oauth_credentials)
+                        logger.info(f"Found owner calendar credentials for: {owner_with_calendar.first_name}")
+                    except (json.JSONDecodeError, TypeError) as e:
+                        logger.warning(f"Failed to parse owner OAuth credentials: {e}")
+            
+            # If no owner found by calendar ID, find any owner with OAuth
+            if not owner_with_calendar:
+                from database import UserRole
+                owner_with_calendar = self.db.query(User).filter(
+                    User.role == UserRole.OWNER,
+                    User.oauth_credentials.isnot(None),
+                    User.google_calendar_id.isnot(None)
+                ).first()
+                
+                if owner_with_calendar and owner_with_calendar.oauth_credentials:
+                    try:
+                        import json
+                        owner_oauth_creds = json.loads(owner_with_calendar.oauth_credentials)
+                        logger.info(f"Using fallback owner calendar: {owner_with_calendar.first_name}")
+                    except (json.JSONDecodeError, TypeError) as e:
+                        logger.warning(f"Failed to parse fallback owner OAuth credentials: {e}")
+            
             # Try to delete from both calendars using DualCalendarCreator
             deletion_results = self.dual_calendar_creator.delete_meeting_from_both_calendars(
                 event_id=meeting.google_event_id,
                 manager_calendar_id=manager.google_calendar_id if manager else None,
-                owner_calendar_id=meeting.google_calendar_id,  # This might be owner's calendar
-                manager_oauth_credentials=None,  # TODO: Implement OAuth credentials loading
-                owner_oauth_credentials=None    # TODO: Implement OAuth credentials loading
+                owner_calendar_id=owner_with_calendar.google_calendar_id if owner_with_calendar else meeting.google_calendar_id,
+                manager_oauth_credentials=manager_oauth_creds,
+                owner_oauth_credentials=owner_oauth_creds
             )
             
             # Log deletion results

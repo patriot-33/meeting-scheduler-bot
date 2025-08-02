@@ -174,6 +174,23 @@ class ManagerOAuthService:
             logger.error(f"Error getting calendar service for manager {telegram_id}: {e}")
             return None
     
+    def create_calendar_service_from_credentials(self, credentials_data: dict):
+        """Create authenticated calendar service from credentials data."""
+        try:
+            # Create credentials from the provided data
+            credentials = Credentials.from_authorized_user_info(credentials_data)
+            
+            # Refresh token if needed
+            if credentials.expired and credentials.refresh_token:
+                credentials.refresh(Request())
+            
+            # Build and return calendar service
+            return build('calendar', 'v3', credentials=credentials)
+            
+        except Exception as e:
+            logger.error(f"Error creating calendar service from credentials: {e}")
+            return None
+    
     def _store_oauth_state(self, telegram_id: int, state: str):
         """Store OAuth state temporarily."""
         # В продакшене лучше использовать Redis
