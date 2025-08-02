@@ -83,14 +83,17 @@ class DualCalendarCreator:
             logger.info(f"Creating meeting in manager's calendar: {manager_calendar_id}")
             
             manager_event_data = base_event_data.copy()
-            # Add owner as optional attendee if email available and attendees are enabled
-            if owner_email and not settings.google_calendar_force_attendee_free:
+            # Add owner as optional attendee if email available (OAuth calendars support attendees)
+            if owner_email and self._is_valid_email(owner_email):
                 manager_event_data['attendees'] = [{
                     'email': owner_email,
                     'displayName': owner_name,
                     'optional': True,
                     'responseStatus': 'needsAction'
                 }]
+                logger.info(f"Adding owner {owner_name} ({owner_email}) as attendee to manager's calendar")
+            elif owner_email and not self._is_valid_email(owner_email):
+                logger.warning(f"⚠️ Invalid owner email '{owner_email}' - creating meeting without owner as attendee")
             
             # Create event
             manager_event = self._create_event_with_fallback(
@@ -116,14 +119,17 @@ class DualCalendarCreator:
                 logger.info(f"Creating meeting in owner's calendar: {owner_calendar_id}")
                 
                 owner_event_data = base_event_data.copy()
-                # Add manager as optional attendee if email available and attendees are enabled
-                if manager_email and not settings.google_calendar_force_attendee_free:
+                # Add manager as optional attendee if email available (OAuth calendars support attendees)
+                if manager_email and self._is_valid_email(manager_email):
                     owner_event_data['attendees'] = [{
                         'email': manager_email,
                         'displayName': manager_name,
                         'optional': True,
                         'responseStatus': 'needsAction'
                     }]
+                    logger.info(f"Adding manager {manager_name} ({manager_email}) as attendee to owner's calendar")
+                elif manager_email and not self._is_valid_email(manager_email):
+                    logger.warning(f"⚠️ Invalid manager email '{manager_email}' - creating meeting without manager as attendee")
                 
                 # If we got a meet link from manager's event, add it to description but keep conferenceData
                 if results['meet_link']:
@@ -170,16 +176,48 @@ class DualCalendarCreator:
                     logger.info(f"✅ Created event with Google Meet in {calendar_type}'s calendar")
                     return event
                 except Exception as conf_error:
-                    logger.warning(f"Conference creation failed for {calendar_type}: {conf_error}")
-                    # Remove conference data and try again
-                    event_data_fallback = event_data.copy()
-                    event_data_fallback.pop('conferenceData', None)
-                    event = self.calendar_service._service.events().insert(
-                        calendarId=calendar_id,
-                        body=event_data_fallback
-                    ).execute()
-                    logger.info(f"✅ Created event without Google Meet in {calendar_type}'s calendar")
-                    return event
+                    error_msg = str(conf_error).lower()
+                    
+                    # Check if error is related to invalid attendees
+                    if "invalid attendee" in error_msg or "attendee" in error_msg:
+                        logger.warning(f"❌ Attendee error for {calendar_type}: {conf_error}")
+                        logger.info(f"🔄 Retrying without attendees for {calendar_type}'s calendar")
+                        
+                        # Remove attendees and try again
+                        event_data_fallback = event_data.copy()
+                        event_data_fallback.pop('attendees', None)
+                        
+                        try:
+                            event = self.calendar_service._service.events().insert(
+                                calendarId=calendar_id,
+                                body=event_data_fallback,
+                                conferenceDataVersion=1
+                            ).execute()
+                            logger.info(f"✅ Created event with Google Meet (no attendees) in {calendar_type}'s calendar")
+                            return event
+                        except Exception as retry_error:
+                            logger.warning(f"Conference creation still failed for {calendar_type}: {retry_error}")
+                            # Final fallback: no conference data
+                            event_data_final = event_data.copy()
+                            event_data_final.pop('conferenceData', None)
+                            event_data_final.pop('attendees', None)
+                            event = self.calendar_service._service.events().insert(
+                                calendarId=calendar_id,
+                                body=event_data_final
+                            ).execute()
+                            logger.info(f"✅ Created basic event (no Google Meet, no attendees) in {calendar_type}'s calendar")
+                            return event
+                    else:
+                        logger.warning(f"Conference creation failed for {calendar_type}: {conf_error}")
+                        # Remove conference data and try again
+                        event_data_fallback = event_data.copy()
+                        event_data_fallback.pop('conferenceData', None)
+                        event = self.calendar_service._service.events().insert(
+                            calendarId=calendar_id,
+                            body=event_data_fallback
+                        ).execute()
+                        logger.info(f"✅ Created event without Google Meet in {calendar_type}'s calendar")
+                        return event
             else:
                 # No conference data, create directly
                 event = self.calendar_service._service.events().insert(
@@ -191,6 +229,16 @@ class DualCalendarCreator:
         except Exception as e:
             logger.error(f"Failed to create event in {calendar_type}'s calendar: {e}")
             return None
+    
+    def _is_valid_email(self, email: str) -> bool:
+        """Check if email is valid and not empty."""
+        if not email or not isinstance(email, str):
+            return False
+        
+        # Basic email validation
+        import re
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        return bool(re.match(email_pattern, email.strip()))
     
     def delete_meeting_from_both_calendars(
         self,

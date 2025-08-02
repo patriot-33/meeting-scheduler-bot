@@ -177,26 +177,15 @@ class MeetingService:
                             raise calendar_error
                 else:
                     # No owners have connected their calendars via OAuth
-                    logger.error(f"🔍 DEBUG: No owners have connected their Google Calendar via OAuth")
-                    logger.error(f"🔍 DEBUG: Owners need to use /calendar command to connect their calendars")
+                    logger.error(f"❌ CALENDAR SETUP REQUIRED: No users have connected their Google Calendar via OAuth")
+                    logger.error(f"📋 SOLUTION: Users need to use /calendar command to connect their calendars")
+                    logger.error(f"💡 OAuth calendars are required to create meetings with participants")
                     
-                    # Check if we have legacy Service Account setup as fallback
-                    from config import settings
-                    if hasattr(settings, 'google_calendar_id_1') and settings.google_calendar_id_1:
-                        logger.info(f"🔍 DEBUG: Falling back to Service Account with calendar: {settings.google_calendar_id_1}")
-                        # Legacy service account fallback
-                        event_id, meet_link = self.calendar_service.create_meeting_with_owners(
-                            settings.google_calendar_id_1,
-                            f"{manager.first_name} {manager.last_name}",
-                            manager.department.value,
-                            scheduled_time,
-                            time_str,
-                            owner_emails,
-                            manager_email=manager_email
-                        )
-                    else:
-                        logger.error(f"🔍 DEBUG: No calendar configuration found - neither OAuth owners nor Service Account")
-                        return None
+                    # Don't fallback to Service Account to avoid attendee errors
+                    raise Exception(
+                        "Calendar setup required: No OAuth calendars connected. "
+                        "Users must connect their Google Calendar using /calendar command to enable meeting creation with participants."
+                    )
             
             # Save to database
             meeting = Meeting(
