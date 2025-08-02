@@ -94,7 +94,7 @@ class DualCalendarCreator:
             'createRequest': {
                 'requestId': conference_request_id,
                 'conferenceSolutionKey': {
-                    'type': 'hangoutsMeet'  # Use hangoutsMeet for Service Account, will be changed for OAuth
+                    'type': 'hangoutsMeet'  # Use hangoutsMeet for all calendars
                 }
             }
         }
@@ -107,9 +107,9 @@ class DualCalendarCreator:
             # Only add attendees for OAuth calendars
             is_manager_oauth = self._is_oauth_calendar(manager_calendar_id)
             
-            # Adjust conference type based on calendar type
-            if is_manager_oauth:
-                manager_event_data['conferenceData']['createRequest']['conferenceSolutionKey']['type'] = 'eventHangout'
+            # Keep hangoutsMeet for all calendar types (eventHangout doesn't work)
+            # if is_manager_oauth:
+            #     manager_event_data['conferenceData']['createRequest']['conferenceSolutionKey']['type'] = 'eventHangout'
             
             if is_manager_oauth and owner_email and self._is_valid_email(owner_email):
                 manager_event_data['attendees'] = [{
@@ -152,9 +152,9 @@ class DualCalendarCreator:
                 # Only add attendees for OAuth calendars
                 is_owner_oauth = self._is_oauth_calendar(owner_calendar_id)
                 
-                # Adjust conference type based on calendar type
-                if is_owner_oauth:
-                    owner_event_data['conferenceData']['createRequest']['conferenceSolutionKey']['type'] = 'eventHangout'
+                # Keep hangoutsMeet for all calendar types (eventHangout doesn't work)
+                # if is_owner_oauth:
+                #     owner_event_data['conferenceData']['createRequest']['conferenceSolutionKey']['type'] = 'eventHangout'
                 
                 if is_owner_oauth and manager_email and self._is_valid_email(manager_email):
                     owner_event_data['attendees'] = [{
@@ -282,17 +282,26 @@ class DualCalendarCreator:
             # IMPORTANT: Check database FIRST to determine if user connected via OAuth
             from database import get_db, User, UserRole
             with get_db() as db:
+                # CRITICAL FIX: Owner calendar (plantatorbob@gmail.com) is Service Account, not OAuth!
+                # Even if user exists in DB, check if they actually have OAuth credentials
                 oauth_user = db.query(User).filter(
                     User.google_calendar_id == calendar_id,
                     User.oauth_credentials.isnot(None)
                 ).first()
                 
-                if oauth_user:
-                    logger.info(f"🔍 Calendar {calendar_id} detected as OAuth (user: {oauth_user.first_name})")
-                    return True
+                if oauth_user and oauth_user.oauth_credentials:
+                    # Double check it's not just empty credentials
+                    try:
+                        import json
+                        creds = json.loads(oauth_user.oauth_credentials)
+                        if creds and 'refresh_token' in creds:
+                            logger.info(f"🔍 Calendar {calendar_id} detected as OAuth (user: {oauth_user.first_name})")
+                            return True
+                    except:
+                        pass
             
-            # If not found in OAuth users, it's a Service Account calendar
-            logger.info(f"🔍 Calendar {calendar_id} detected as Service Account (not found in OAuth users)")
+            # If not found in OAuth users or no valid credentials, it's a Service Account calendar
+            logger.info(f"🔍 Calendar {calendar_id} detected as Service Account (no valid OAuth credentials)")
             return False
             
         except Exception as e:
