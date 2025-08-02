@@ -108,7 +108,12 @@ class MeetingService:
                     
                     if primary_owner:
                         owner_name = f"{primary_owner.first_name} {primary_owner.last_name}"
-                        owner_email = primary_owner.email
+                        # Validate owner email - filter out invalid emails like "Я назначил"
+                        if primary_owner.email and self._is_valid_email(primary_owner.email):
+                            owner_email = primary_owner.email
+                        else:
+                            logger.warning(f"Owner {owner_name} has invalid email: '{primary_owner.email}' - not using for attendees")
+                            owner_email = None
                         # Check if owner has calendar connected
                         if primary_owner.google_calendar_id:
                             owner_calendar_id = primary_owner.google_calendar_id
@@ -186,15 +191,29 @@ class MeetingService:
                         "Users must connect their Google Calendar using /calendar command to enable meeting creation with participants."
                     )
             
-            # Save to database
-            meeting = Meeting(
-                manager_id=manager_id,
-                scheduled_time=scheduled_time,
-                google_event_id=event_id,
-                google_meet_link=meet_link,
-                google_calendar_id=calendar_id_to_use,  # Save which calendar was used
-                status=MeetingStatus.SCHEDULED
-            )
+            # Get the result variable from the calendar creation
+            if 'result' in locals():
+                # Save to database with dual event IDs from successful creation
+                meeting = Meeting(
+                    manager_id=manager_id,
+                    scheduled_time=scheduled_time,
+                    google_event_id=event_id,  # Primary event ID (manager's)
+                    google_manager_event_id=result.get('manager_event_id'),  # Manager's calendar event ID
+                    google_owner_event_id=result.get('owner_event_id'),  # Owner's calendar event ID
+                    google_meet_link=meet_link,
+                    google_calendar_id=calendar_id_to_use,  # Save which calendar was used
+                    status=MeetingStatus.SCHEDULED
+                )
+            else:
+                # Fallback for non-dual calendar creation
+                meeting = Meeting(
+                    manager_id=manager_id,
+                    scheduled_time=scheduled_time,
+                    google_event_id=event_id,
+                    google_meet_link=meet_link,
+                    google_calendar_id=calendar_id_to_use,
+                    status=MeetingStatus.SCHEDULED
+                )
             
             self.db.add(meeting)
             self.db.commit()
@@ -270,9 +289,10 @@ class MeetingService:
                     except (json.JSONDecodeError, TypeError) as e:
                         logger.warning(f"Failed to parse fallback owner OAuth credentials: {e}")
             
-            # Try to delete from both calendars using DualCalendarCreator
-            deletion_results = self.dual_calendar_creator.delete_meeting_from_both_calendars(
-                event_id=meeting.google_event_id,
+            # Try to delete from both calendars using DualCalendarCreator with proper event IDs
+            deletion_results = self.dual_calendar_creator.delete_meeting_from_both_calendars_dual(
+                manager_event_id=meeting.google_manager_event_id or meeting.google_event_id,
+                owner_event_id=meeting.google_owner_event_id or meeting.google_event_id,
                 manager_calendar_id=manager.google_calendar_id if manager else None,
                 owner_calendar_id=owner_with_calendar.google_calendar_id if owner_with_calendar else meeting.google_calendar_id,
                 manager_oauth_credentials=manager_oauth_creds,
@@ -443,6 +463,16 @@ ID встречи: {meeting.id}"""
             
         except Exception as e:
             logger.error(f"Failed to notify owners: {e}")
+    
+    def _is_valid_email(self, email: str) -> bool:
+        """Check if email is valid and not empty."""
+        if not email or not isinstance(email, str):
+            return False
+        
+        # Basic email validation
+        import re
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        return bool(re.match(email_pattern, email.strip()))
     
     def get_overdue_users(self, days_overdue: int = 17) -> List[User]:
         """Get users who haven't scheduled meetings in specified days."""

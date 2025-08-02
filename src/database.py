@@ -67,7 +67,9 @@ class Meeting(Base):
     id = Column(Integer, primary_key=True)
     manager_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     scheduled_time = Column(DateTime, nullable=False)
-    google_event_id = Column(String(255), unique=True)
+    google_event_id = Column(String(255), unique=True)  # Primary event ID (manager's)
+    google_manager_event_id = Column(String(255))  # Manager's calendar event ID
+    google_owner_event_id = Column(String(255))  # Owner's calendar event ID  
     google_meet_link = Column(String(500))
     google_calendar_id = Column(String(255))  # Calendar where event was created
     status = Column(Enum(MeetingStatus, name='meetingstatus', values_callable=lambda x: [e.value for e in x]), default=MeetingStatus.SCHEDULED)
@@ -237,6 +239,25 @@ def _ensure_missing_fields_exist():
             logger.info("✅ Поле google_calendar_id в meetings успешно добавлено")
         else:
             logger.info("✅ Поле google_calendar_id в meetings уже существует")
+            
+        # Check meetings table for dual event ID columns for proper deletion support
+        if 'google_manager_event_id' not in meetings_columns:
+            logger.info("Добавляем поле google_manager_event_id в таблицу meetings...")
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE meetings ADD COLUMN google_manager_event_id VARCHAR(255)"))
+                conn.commit()
+            logger.info("✅ Поле google_manager_event_id в meetings успешно добавлено")
+        else:
+            logger.info("✅ Поле google_manager_event_id в meetings уже существует")
+            
+        if 'google_owner_event_id' not in meetings_columns:
+            logger.info("Добавляем поле google_owner_event_id в таблицу meetings...")
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE meetings ADD COLUMN google_owner_event_id VARCHAR(255)"))
+                conn.commit()
+            logger.info("✅ Поле google_owner_event_id в meetings успешно добавлено")
+        else:
+            logger.info("✅ Поле google_owner_event_id в meetings уже существует")
             
     except Exception as e:
         logger.warning(f"⚠️ Не удалось проверить/добавить поля: {e}")

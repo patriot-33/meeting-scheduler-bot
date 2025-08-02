@@ -63,9 +63,12 @@ class DualCalendarCreator:
             },
             'conferenceData': {
                 'createRequest': {
-                    'requestId': f"meet-{int(datetime.now().timestamp())}-{hash(manager_calendar_id)}",
+                    'requestId': f"meet-{int(datetime.now().timestamp())}-{abs(hash(manager_calendar_id))}",
                     'conferenceSolutionKey': {
                         'type': 'hangoutsMeet'
+                    },
+                    'status': {
+                        'statusCode': 'pending'
                     }
                 }
             },
@@ -208,7 +211,32 @@ class DualCalendarCreator:
                             logger.info(f"✅ Created basic event (no Google Meet, no attendees) in {calendar_type}'s calendar")
                             return event
                     else:
+                        error_msg = str(conf_error).lower()
                         logger.warning(f"Conference creation failed for {calendar_type}: {conf_error}")
+                        
+                        # Check if error is related to conference type
+                        if "invalid conference type" in error_msg:
+                            logger.info(f"🔄 Trying alternative Google Meet creation for {calendar_type}")
+                            
+                            # Try alternative conference data format
+                            alternative_event_data = event_data.copy()
+                            alternative_event_data['conferenceData'] = {
+                                'createRequest': {
+                                    'requestId': f"alt-meet-{int(datetime.now().timestamp())}-{abs(hash(calendar_id))}"
+                                }
+                            }
+                            
+                            try:
+                                event = self.calendar_service._service.events().insert(
+                                    calendarId=calendar_id,
+                                    body=alternative_event_data,
+                                    conferenceDataVersion=1
+                                ).execute()
+                                logger.info(f"✅ Created event with alternative Google Meet in {calendar_type}'s calendar")
+                                return event
+                            except Exception as alt_error:
+                                logger.warning(f"Alternative Meet creation failed for {calendar_type}: {alt_error}")
+                        
                         # Remove conference data and try again
                         event_data_fallback = event_data.copy()
                         event_data_fallback.pop('conferenceData', None)
@@ -314,6 +342,87 @@ class DualCalendarCreator:
             logger.info(f"✅ Successfully deleted event from {results['total_deleted']} calendar(s)")
         else:
             logger.error(f"❌ Failed to delete event from any calendar. Errors: {results['errors']}")
+            
+        return results
+    
+    def delete_meeting_from_both_calendars_dual(
+        self,
+        manager_event_id: str,
+        owner_event_id: str,
+        manager_calendar_id: Optional[str] = None,
+        owner_calendar_id: Optional[str] = None,
+        manager_oauth_credentials: Optional[dict] = None,
+        owner_oauth_credentials: Optional[dict] = None
+    ) -> Dict[str, Any]:
+        """
+        Delete meeting from both calendars using specific event IDs for each calendar.
+        
+        Args:
+            manager_event_id: Event ID in manager's calendar
+            owner_event_id: Event ID in owner's calendar  
+            manager_calendar_id: Manager's calendar ID
+            owner_calendar_id: Owner's calendar ID
+            manager_oauth_credentials: Manager's OAuth credentials
+            owner_oauth_credentials: Owner's OAuth credentials
+        
+        Returns:
+            Dict with success status, deleted calendars count, and errors
+        """
+        results = {
+            'success': False,
+            'deleted_from_manager': False,
+            'deleted_from_owner': False,
+            'total_deleted': 0,
+            'errors': []
+        }
+        
+        # Delete from manager's calendar
+        if manager_calendar_id and manager_event_id:
+            try:
+                success = self._delete_from_calendar(
+                    manager_event_id, 
+                    manager_calendar_id, 
+                    "manager",
+                    manager_oauth_credentials
+                )
+                if success:
+                    results['deleted_from_manager'] = True
+                    results['total_deleted'] += 1
+                    logger.info(f"✅ Deleted event {manager_event_id} from manager's calendar: {manager_calendar_id}")
+                else:
+                    results['errors'].append("Failed to delete from manager's calendar")
+            except Exception as e:
+                logger.error(f"Error deleting from manager's calendar: {e}")
+                results['errors'].append(f"Manager calendar deletion error: {str(e)}")
+        
+        # Delete from owner's calendar (if different event ID and calendar)
+        if owner_calendar_id and owner_event_id and (
+            owner_event_id != manager_event_id or owner_calendar_id != manager_calendar_id
+        ):
+            try:
+                success = self._delete_from_calendar(
+                    owner_event_id, 
+                    owner_calendar_id, 
+                    "owner",
+                    owner_oauth_credentials
+                )
+                if success:
+                    results['deleted_from_owner'] = True
+                    results['total_deleted'] += 1
+                    logger.info(f"✅ Deleted event {owner_event_id} from owner's calendar: {owner_calendar_id}")
+                else:
+                    results['errors'].append("Failed to delete from owner's calendar")
+            except Exception as e:
+                logger.error(f"Error deleting from owner's calendar: {e}")
+                results['errors'].append(f"Owner calendar deletion error: {str(e)}")
+        
+        # Determine overall success
+        results['success'] = results['total_deleted'] > 0
+        
+        if results['success']:
+            logger.info(f"✅ Successfully deleted meeting from {results['total_deleted']} calendar(s)")
+        else:
+            logger.error(f"❌ Failed to delete meeting from any calendar. Errors: {results['errors']}")
             
         return results
     

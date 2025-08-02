@@ -722,24 +722,31 @@ async def connect_owner_calendar(update: Update, context: ContextTypes.DEFAULT_T
 
 async def handle_owner_calendar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка callback для календаря владельца."""
+    from utils.telegram_safe import telegram_safe
+    
     query = update.callback_query
     await query.answer()
+    
+    @telegram_safe(max_retries=1)
+    async def safe_edit_message(text, reply_markup=None):
+        """Safe wrapper for editing messages."""
+        return await query.edit_message_text(text=text, reply_markup=reply_markup)
     
     if query.data == "connect_owner_calendar":
         # Перенаправляем на основную функцию подключения
         fake_update = type('obj', (object,), {
             'effective_user': query.from_user,
             'message': type('obj', (object,), {
-                'reply_text': query.edit_message_text
+                'reply_text': safe_edit_message
             })()
         })()
         await connect_owner_calendar(fake_update, context)
     elif query.data == "reconnect_owner_calendar":
-        # Переподключение календаря
+        # Переподключение календаря  
         fake_update = type('obj', (object,), {
             'effective_user': query.from_user,
             'message': type('obj', (object,), {
-                'reply_text': query.edit_message_text
+                'reply_text': safe_edit_message
             })()
         })()
         await connect_owner_calendar(fake_update, context)
