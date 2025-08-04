@@ -319,15 +319,10 @@ class DualCalendarCreator:
     def _is_oauth_calendar(self, calendar_id: str) -> bool:
         """Detect if calendar is OAuth-based vs Service Account based."""
         try:
-            # CRITICAL FIX: plantatorbob@gmail.com is ALWAYS Service Account!
-            if 'plantatorbob@gmail.com' in calendar_id:
-                logger.info(f"🔍 Calendar {calendar_id} HARDCODED as Service Account (plantatorbob exception)")
-                return False
-                
             # IMPORTANT: Check database FIRST to determine if user connected via OAuth
             from database import get_db, User, UserRole
             with get_db() as db:
-                # Even if user exists in DB, check if they actually have OAuth credentials
+                # Check if user has OAuth credentials (regardless of email)
                 oauth_user = db.query(User).filter(
                     User.google_calendar_id == calendar_id,
                     User.oauth_credentials.isnot(None)
@@ -339,7 +334,7 @@ class DualCalendarCreator:
                         import json
                         creds = json.loads(oauth_user.oauth_credentials)
                         if creds and 'refresh_token' in creds and len(creds.get('refresh_token', '')) > 10:
-                            logger.info(f"🔍 Calendar {calendar_id} detected as OAuth (user: {oauth_user.first_name})")
+                            logger.info(f"🔍 Calendar {calendar_id} detected as OAuth (user: {oauth_user.first_name}, role: {oauth_user.role.value})")
                             return True
                     except:
                         pass

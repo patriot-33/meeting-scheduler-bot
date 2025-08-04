@@ -273,10 +273,11 @@ async def main():
                 # Route to appropriate handler based on user role
                 logger.info(f"🔍 DEBUG: unified_calendar_handler - User {user_id} has role {user.role.value}")
                 if user.role == UserRole.OWNER:
-                    logger.info(f"🔍 Routing /calendar to OWNER handler for user {user_id}")
-                    await owner.connect_owner_calendar(update, context)
+                    logger.info(f"🔍 Routing /calendar to OAuth handler for OWNER user {user_id}")
+                    # Use OAuth handler for owners to enable Google Meet
+                    await manager_calendar.connect_calendar(update, context)
                 elif user.role == UserRole.MANAGER:
-                    logger.info(f"🔍 Routing /calendar to MANAGER handler for user {user_id}")
+                    logger.info(f"🔍 Routing /calendar to OAuth handler for MANAGER user {user_id}")
                     await manager_calendar.connect_calendar(update, context)
                 else:
                     logger.warning(f"❌ Access denied: User {user_id} has role {user.role.value}, access only for OWNER/MANAGER")
@@ -286,6 +287,7 @@ async def main():
             await update.message.reply_text("❌ Произошла ошибка. Попробуйте позже.")
     
     application.add_handler(CommandHandler("calendar", unified_calendar_handler))  # Unified handler
+    application.add_handler(CommandHandler("connect_google", unified_calendar_handler))  # Alias for OAuth connection
     application.add_handler(CommandHandler("calendar_simple", manager_calendar_simple.simple_calendar_connect))  # Simple method
     application.add_handler(CommandHandler("calendar_instructions", manager_calendar_simple.simple_calendar_connect))  # Alias for simple method
     application.add_handler(CommandHandler("setcalendar", manager_calendar_simple.set_calendar_id))  # Set calendar ID

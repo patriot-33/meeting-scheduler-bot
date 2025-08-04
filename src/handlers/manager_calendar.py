@@ -30,9 +30,10 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user = db.query(User).filter(User.telegram_id == user_id).first()
             logger.info(f"🔍 DEBUG: User found - ID: {user.telegram_id}, role: {user.role.value}, calendar: {user.google_calendar_id}")
             
-            if user.role != UserRole.MANAGER:
-                logger.warning(f"❌ DEBUG: Access denied - user role is {user.role.value}, expected MANAGER")
-                await safe_send_message(update, "❌ Данная функция доступна только руководителям отделов.")
+            # Allow both MANAGER and OWNER to connect calendars via OAuth
+            if user.role not in [UserRole.MANAGER, UserRole.OWNER]:
+                logger.warning(f"❌ DEBUG: Access denied - user role is {user.role.value}, expected MANAGER or OWNER")
+                await safe_send_message(update, "❌ Данная функция доступна только руководителям и владельцам.")
                 return
             
             # Check calendar connection status
@@ -449,17 +450,19 @@ async def disconnect_calendar_handler(update: Update, context: ContextTypes.DEFA
     with db_context_manager() as db:
         user = db.query(User).filter(User.telegram_id == user_id).first()
         
-        if user and user.role == UserRole.MANAGER:
+        # Allow both MANAGER and OWNER to disconnect calendars
+        if user and user.role in [UserRole.MANAGER, UserRole.OWNER]:
             # Clear calendar connection
             user.oauth_credentials = None
             user.google_calendar_id = None
             user.calendar_connected = False
             db.commit()
             
+            role_name = "владельца" if user.role == UserRole.OWNER else "руководителя"
             await safe_send_message(update,
-                "✅ **Календарь отключен**\n\n"
-                "Ваши данные Google Calendar были удалены из системы.\n"
-                "Вы можете подключить календарь заново в любое время командой /calendar",
+                f"✅ **Календарь отключен**\n\n"
+                f"Ваши данные Google Calendar были удалены из системы.\n"
+                f"Вы можете подключить календарь заново в любое время командой /calendar",
                 parse_mode='Markdown'
             )
         else:
