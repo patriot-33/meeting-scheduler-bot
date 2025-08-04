@@ -347,6 +347,7 @@ class MeetingService:
         """Check if a specific slot is available for booking."""
         # Check if owners are available in local database
         if not OwnerService.are_both_owners_available(slot_datetime):
+            logger.info(f"❌ Slot {slot_datetime} not available: owners not available in local DB")
             return False
         
         # Check if slot is not already booked in local database
@@ -358,16 +359,23 @@ class MeetingService:
         ).first()
         
         if existing_meeting:
+            logger.info(f"❌ Slot {slot_datetime} not available: already booked (meeting ID: {existing_meeting.id})")
             return False
         
-        # CRITICAL FIX: Check Google Calendar availability
-        if self.calendar_service.is_available:
-            from config import settings
-            if hasattr(settings, 'google_calendar_id_1') and settings.google_calendar_id_1:
-                # Check if the slot is busy in Google Calendar
-                if not self._is_google_calendar_slot_free(settings.google_calendar_id_1, slot_datetime):
+        # CRITICAL FIX: Check Google Calendar availability for all owners
+        owners = OwnerService.get_all_owners()
+        for owner in owners:
+            if owner.google_calendar_id:
+                # Use the proper method that handles OAuth
+                is_free = OwnerService._check_google_calendar_slot(owner.google_calendar_id, slot_datetime)
+                if is_free is False:
+                    logger.warning(f"❌ Slot {slot_datetime} not available: owner {owner.first_name}'s calendar is busy")
+                    return False
+                elif is_free is None:
+                    logger.error(f"⚠️ Could not check calendar for owner {owner.first_name}, conservatively marking as unavailable")
                     return False
         
+        logger.info(f"✅ Slot {slot_datetime} is available for booking")
         return True
     
     def _is_google_calendar_slot_free(self, calendar_id: str, slot_datetime: datetime, duration_minutes: int = 60) -> bool:

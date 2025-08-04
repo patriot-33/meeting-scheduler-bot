@@ -495,22 +495,57 @@ class OwnerService:
             return None  # Calendar service unavailable
         
         try:
+            import pytz
+            from config import settings
+            
+            # Определяем часовой пояс
+            timezone = pytz.timezone(settings.business_timezone if hasattr(settings, 'business_timezone') else 'Europe/Moscow')
+            
+            # Если datetime не содержит timezone info, добавляем его
+            if slot_datetime.tzinfo is None:
+                slot_datetime = timezone.localize(slot_datetime)
+            
             slot_end = slot_datetime + timedelta(hours=1)
-            time_min = slot_datetime.isoformat() + 'Z'
-            time_max = slot_end.isoformat() + 'Z'
+            
+            # Конвертируем в UTC для API
+            time_min = slot_datetime.astimezone(pytz.UTC).isoformat().replace('+00:00', 'Z')
+            time_max = slot_end.astimezone(pytz.UTC).isoformat().replace('+00:00', 'Z')
+            
+            logger.info(f"🔍 Checking calendar {calendar_id} for slot {slot_datetime.strftime('%Y-%m-%d %H:%M %Z')}")
+            logger.info(f"🔍 FreeBusy query: {time_min} to {time_max}")
             
             freebusy_query = {
                 'timeMin': time_min,
                 'timeMax': time_max,
-                'items': [{'id': calendar_id}]
+                'items': [{'id': calendar_id}],
+                'timeZone': str(timezone)  # Указываем timezone для правильной интерпретации
             }
             
             freebusy_result = service_to_use.freebusy().query(body=freebusy_query).execute()
-            busy_times = freebusy_result['calendars'][calendar_id].get('busy', [])
+            
+            # Детальное логирование результата
+            calendar_data = freebusy_result.get('calendars', {}).get(calendar_id, {})
+            busy_times = calendar_data.get('busy', [])
+            errors = calendar_data.get('errors', [])
+            
+            if errors:
+                logger.error(f"❌ Calendar API errors for {calendar_id}: {errors}")
+                return None
+            
+            logger.info(f"📊 FreeBusy result for {calendar_id}: {len(busy_times)} busy periods found")
+            
+            # Логируем каждый занятый период
+            for busy_period in busy_times:
+                busy_start = busy_period.get('start', 'unknown')
+                busy_end = busy_period.get('end', 'unknown')
+                logger.info(f"  📌 Busy: {busy_start} to {busy_end}")
             
             is_free = len(busy_times) == 0
-            if not is_free:
-                logger.info(f"📅 Slot {slot_datetime.strftime('%Y-%m-%d %H:%M')} is BUSY in calendar {calendar_id}")
+            
+            if is_free:
+                logger.info(f"✅ Slot {slot_datetime.strftime('%Y-%m-%d %H:%M %Z')} is FREE in calendar {calendar_id}")
+            else:
+                logger.warning(f"❌ Slot {slot_datetime.strftime('%Y-%m-%d %H:%M %Z')} is BUSY in calendar {calendar_id}")
             
             return is_free  # True if no busy times
             
