@@ -285,8 +285,9 @@ async def disconnect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE
         try:
             user = db.query(User).filter(User.telegram_id == user_id).first()
             
-            if not user or user.role != UserRole.MANAGER:
-                await update.message.reply_text("❌ Функция доступна только руководителям.")
+            # Allow both MANAGER and OWNER to disconnect calendars
+            if not user or user.role not in [UserRole.MANAGER, UserRole.OWNER]:
+                await update.message.reply_text("❌ Функция доступна только руководителям и владельцам.")
                 return
             
             if not user.google_calendar_id and not user.oauth_credentials:

@@ -240,7 +240,8 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await safe_send_message(update,
                     instructions, 
                     reply_markup=reply_markup,
-                    parse_mode='Markdown'
+                    parse_mode='Markdown',
+                    force_send=True  # Allow duplicate for calendar setup
                 )
                 logger.info(f"🔍 DEBUG: Response sent successfully to user {user_id}")
             except Exception as send_error:
@@ -250,14 +251,15 @@ async def connect_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     clean_instructions = instructions.replace('**', '').replace('`', '').replace('*', '')
                     await safe_send_message(update,
                         clean_instructions,
-                        reply_markup=reply_markup
+                        reply_markup=reply_markup,
+                        force_send=True
                     )
                     logger.info(f"🔍 DEBUG: Response sent without markdown formatting but with keyboard")
                 except Exception as fallback_error:
                     logger.error(f"🔍 DEBUG: Fallback send also failed: {type(fallback_error).__name__}: {fallback_error}")
                     # Last resort - send without keyboard
                     try:
-                        await safe_send_message(update,clean_instructions)
+                        await safe_send_message(update, clean_instructions, force_send=True)
                         logger.info(f"🔍 DEBUG: Response sent without markdown and without keyboard")
                     except Exception as final_error:
                         logger.error(f"🔍 DEBUG: All send attempts failed: {type(final_error).__name__}: {final_error}")

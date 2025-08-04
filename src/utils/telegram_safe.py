@@ -178,7 +178,7 @@ def telegram_safe(max_retries: int = 3, backoff_factor: float = 1.0):
 
 @telegram_safe(max_retries=2)
 @recursion_guard(max_depth=5)
-async def safe_send_message(update_or_context, text, reply_markup=None, parse_mode='Markdown', chat_id=None):
+async def safe_send_message(update_or_context, text, reply_markup=None, parse_mode='Markdown', chat_id=None, force_send=False):
     """
     Enhanced universal safe message sending with comprehensive error handling.
     
@@ -211,7 +211,7 @@ async def safe_send_message(update_or_context, text, reply_markup=None, parse_mo
     elif chat_id:
         effective_chat_id = chat_id
     
-    if effective_chat_id and _message_tracker.is_duplicate(effective_chat_id, text, markup_str):
+    if not force_send and effective_chat_id and _message_tracker.is_duplicate(effective_chat_id, text, markup_str):
         logger.info("📨 Duplicate message detected, preventing spam")
         return {"status": "duplicate_prevented"}
     
