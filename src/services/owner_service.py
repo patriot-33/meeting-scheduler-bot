@@ -462,8 +462,36 @@ class OwnerService:
     def _check_google_calendar_slot(calendar_id: str, slot_datetime: datetime) -> Optional[bool]:
         """Check if a specific slot is free in Google Calendar. Returns True/False/None(error)."""
         from services.google_calendar import google_calendar_service
+        from services.oauth_service import ManagerOAuthService
+        from database import get_db, User
+        import json
         
-        if not google_calendar_service.is_available:
+        # First, check if this is an OAuth calendar
+        oauth_service = None
+        with get_db() as db:
+            user = db.query(User).filter(
+                User.google_calendar_id == calendar_id,
+                User.oauth_credentials.isnot(None)
+            ).first()
+            
+            if user and user.oauth_credentials:
+                try:
+                    # Use OAuth service for OAuth-connected calendars
+                    oauth_credentials = json.loads(user.oauth_credentials)
+                    oauth_manager = ManagerOAuthService()
+                    oauth_service = oauth_manager.create_calendar_service_from_credentials(oauth_credentials)
+                    
+                    if oauth_service:
+                        logger.info(f"✅ Using OAuth service for calendar check: {calendar_id}")
+                except Exception as e:
+                    logger.error(f"Failed to create OAuth service: {e}")
+                    oauth_service = None
+        
+        # Use OAuth service if available, otherwise fall back to Service Account
+        service_to_use = oauth_service if oauth_service else google_calendar_service._service
+        
+        if not service_to_use:
+            logger.error(f"No service available for calendar {calendar_id}")
             return None  # Calendar service unavailable
         
         try:
@@ -477,10 +505,14 @@ class OwnerService:
                 'items': [{'id': calendar_id}]
             }
             
-            freebusy_result = google_calendar_service._service.freebusy().query(body=freebusy_query).execute()
+            freebusy_result = service_to_use.freebusy().query(body=freebusy_query).execute()
             busy_times = freebusy_result['calendars'][calendar_id].get('busy', [])
             
-            return len(busy_times) == 0  # True if no busy times
+            is_free = len(busy_times) == 0
+            if not is_free:
+                logger.info(f"📅 Slot {slot_datetime.strftime('%Y-%m-%d %H:%M')} is BUSY in calendar {calendar_id}")
+            
+            return is_free  # True if no busy times
             
         except Exception as e:
             logger.error(f"Error checking Google Calendar {calendar_id}: {e}")
