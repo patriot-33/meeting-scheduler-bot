@@ -62,16 +62,13 @@ class DualCalendarCreator:
         start_time = scheduled_time.replace(hour=hour, minute=minute, second=0, microsecond=0)
         end_time = start_time + timedelta(minutes=60)
         
-        # Create base event data
-        meet_link = f"https://meet.google.com/new"  # Generic Meet link
+        # Create base event data (without Meet link in description initially)
         base_event_data = {
             'summary': f'Созвон с {department}',
             'description': f'''Еженедельный созвон
 Руководитель: {manager_name}
 Владелец: {owner_name}
 Отдел: {department}
-
-🔗 Google Meet: {meet_link}
 
 Встреча создана автоматически ботом.''',
             'start': {
@@ -137,8 +134,12 @@ class DualCalendarCreator:
             
             if manager_event:
                 results['manager_event_id'] = manager_event.get('id')
-                # Use provided meet link or generic one
-                results['meet_link'] = manager_event.get('hangoutLink', meet_link)
+                # Get Google Meet link if successfully created
+                if manager_event.get('hangoutLink'):
+                    results['meet_link'] = manager_event.get('hangoutLink')
+                    logger.info(f"🔗 Google Meet created successfully: {results['meet_link']}")
+                else:
+                    logger.warning(f"⚠️ No Google Meet link created for manager's event")
                 logger.info(f"✅ Created in manager's calendar: {results['manager_event_id']}")
             else:
                 results['errors'].append("Failed to create in manager's calendar")
@@ -185,9 +186,10 @@ class DualCalendarCreator:
                 
                 if owner_event:
                     results['owner_event_id'] = owner_event.get('id')
-                    # If no meet link yet, use generic one
-                    if not results['meet_link']:
-                        results['meet_link'] = owner_event.get('hangoutLink', meet_link)
+                    # Try to get Google Meet link from owner's event if not already set
+                    if not results['meet_link'] and owner_event.get('hangoutLink'):
+                        results['meet_link'] = owner_event.get('hangoutLink')
+                        logger.info(f"🔗 Google Meet created in owner's calendar: {results['meet_link']}")
                     logger.info(f"✅ Created in owner's calendar: {results['owner_event_id']}")
                 else:
                     results['errors'].append("Failed to create in owner's calendar")
@@ -195,6 +197,11 @@ class DualCalendarCreator:
             except Exception as e:
                 logger.error(f"Error creating in owner's calendar: {e}")
                 results['errors'].append(f"Owner calendar error: {str(e)}")
+        
+        # Add fallback Meet link if no Google Meet was created
+        if not results['meet_link'] and (results['manager_event_id'] or results['owner_event_id']):
+            results['meet_link'] = "https://meet.google.com/new"
+            logger.info(f"🔄 Using fallback Google Meet link: {results['meet_link']}")
         
         # Log final results for debugging
         logger.info(f"📊 DUAL CALENDAR RESULTS: Manager={results['manager_event_id']}, Owner={results['owner_event_id']}, Meet={results['meet_link']}")
