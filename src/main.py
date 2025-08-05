@@ -20,7 +20,7 @@ from aiohttp.web import Request
 
 from config import settings
 from database import init_db
-from handlers import registration, admin, manager, common, owner, manager_calendar, manager_calendar_simple, check_oauth_status
+from handlers import registration, admin, manager, common, owner, manager_calendar
 from services.reminder_service import ReminderService
 from utils.scheduler import setup_scheduler
 
@@ -214,7 +214,7 @@ async def main():
     # Note: manager booking callbacks are handled by get_manager_handlers() below
     application.add_handler(CallbackQueryHandler(manager_calendar.handle_calendar_callback, pattern="^(send_email_to_owner|calendar_faq|connect_calendar|reconnect_calendar|disconnect_calendar|connect_calendar_fresh)$"))
     application.add_handler(CallbackQueryHandler(owner.handle_owner_calendar_callback, pattern="^(connect_owner_calendar|reconnect_owner_calendar)$"))
-    application.add_handler(CallbackQueryHandler(manager_calendar_simple.simple_calendar_faq, pattern="^simple_calendar_faq$"))
+    # Simple calendar handler removed
     application.add_handler(CallbackQueryHandler(lambda u, c: u.callback_query.answer("📋 Email скопирован!"), pattern="^copy_service_email:"))
     application.add_handler(CallbackQueryHandler(common.handle_navigation_callback, pattern="^nav_"))
     
@@ -288,12 +288,8 @@ async def main():
     
     application.add_handler(CommandHandler("calendar", unified_calendar_handler))  # Unified handler
     application.add_handler(CommandHandler("connect_google", unified_calendar_handler))  # Alias for OAuth connection
-    application.add_handler(CommandHandler("calendar_simple", manager_calendar_simple.simple_calendar_connect))  # Simple method
-    application.add_handler(CommandHandler("calendar_instructions", manager_calendar_simple.simple_calendar_connect))  # Alias for simple method
-    application.add_handler(CommandHandler("setcalendar", manager_calendar_simple.set_calendar_id))  # Set calendar ID
-    application.add_handler(CommandHandler("disconnect_calendar", manager_calendar_simple.disconnect_calendar))  # Disconnect calendar
+    # Simple calendar commands removed - use /calendar instead
     application.add_handler(CommandHandler("email", manager_calendar.save_manager_email))
-    application.add_handler(check_oauth_status.create_check_oauth_handler())  # Check OAuth status
     
     logger.info("🤖 ✅ ALL HANDLERS ADDED SUCCESSFULLY")
     logger.info(f"🤖 TOTAL HANDLERS: {len(application.handlers[0])}")  # Get first group handlers count
